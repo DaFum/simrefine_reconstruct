@@ -23,7 +23,9 @@ const SHIPMENT_HORIZON_HOURS = 48;
 const BASE_CRUDE_THROUGHPUT = 120;
 
 export class RefinerySimulation {
-  constructor() {
+  constructor(eventBus = null) {
+    this.eventBus = eventBus;
+    this.previousAlerts = new Map();
     this.timeMinutes = 0;
     this.tickInterval = 1; // simulated minute per tick
     this.baseSpeed = 35; // simulated minutes per real second at 1×
@@ -1051,6 +1053,48 @@ export class RefinerySimulation {
 
     this._updateActionToys(deltaMinutes);
     this._updateAlerts(deltaMinutes);
+
+    if (this.eventBus) {
+      this.completedInspections.forEach((report) => {
+        this.eventBus.emit("INSPECTION_COMPLETED", { unitId: report.unitId, report });
+      });
+      this.completedInspections = [];
+      this._emitAlerts();
+    }
+  }
+
+  _emitAlerts() {
+    const activeAlerts = this.getActiveAlerts();
+    const activeAlertsById = new Map();
+
+    activeAlerts.forEach((alert) => {
+      let id;
+      if (alert.type === "unit") {
+        id = `unit-${alert.unitId}-${alert.severity}`;
+      } else if (alert.type === "storage") {
+        const productPart = alert.product || "unknown";
+        const severityPart = alert.severity || "info";
+        id = `storage-${productPart}-${severityPart}`;
+      } else {
+        const typePart = alert.type || "alert";
+        const severityPart = alert.severity || "info";
+        id = `${typePart}-${severityPart}`;
+      }
+
+      activeAlertsById.set(id, alert);
+
+      if (!this.previousAlerts.has(id)) {
+        this.eventBus.emit("ALERT_RAISED", { ...alert, id });
+      }
+    });
+
+    this.previousAlerts.forEach((alert, id) => {
+      if (!activeAlertsById.has(id)) {
+        this.eventBus.emit("ALERT_CLEARED", { ...alert, id });
+      }
+    });
+
+    this.previousAlerts = activeAlertsById;
   }
 
   _updateActionToys(deltaMinutes) {
