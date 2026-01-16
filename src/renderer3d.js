@@ -103,6 +103,7 @@ export class TileRenderer {
 
     // Initialize procedural textures for effects
     this._initEffectTextures();
+    this._initActionToys();
   }
 
   getSurface() {
@@ -341,6 +342,7 @@ export class TileRenderer {
     }
 
     this._updateEffects(deltaSeconds);
+    this._updateActionToys(deltaSeconds);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -501,6 +503,166 @@ export class TileRenderer {
           }
        }
     });
+  }
+
+  _initActionToys() {
+      // Truck Geometry
+      const truckGeo = new THREE.BoxGeometry(0.8, 0.5, 1.6);
+      truckGeo.translate(0, 0.25, 0);
+      const truckMat = new THREE.MeshStandardMaterial({ color: 0xffa500 });
+      this.truckMesh = new THREE.InstancedMesh(truckGeo, truckMat, 50);
+      this.truckMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.scene.add(this.truckMesh);
+
+      // Drone Geometry
+      const droneGeo = new THREE.ConeGeometry(0.4, 0.8, 4);
+      droneGeo.rotateX(Math.PI/2);
+      const droneMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true });
+      this.droneMesh = new THREE.InstancedMesh(droneGeo, droneMat, 20);
+      this.droneMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.scene.add(this.droneMesh);
+
+      // Scaffolding Group (managed per unit)
+      this.scaffoldingGroup = new THREE.Group();
+      this.scene.add(this.scaffoldingGroup);
+      this.activeScaffolds = new Map();
+  }
+
+  _updateActionToys(dt) {
+      if (!this.simulation || typeof this.simulation.getActionToysState !== "function") return;
+      const state = this.simulation.getActionToysState();
+
+      // Update Trucks
+      let truckCount = 0;
+      const dummy = new THREE.Object3D();
+      const tempPos = new THREE.Vector3();
+      const tempLook = new THREE.Vector3();
+
+      state.convoys.forEach(convoy => {
+          // Calculate position based on progress
+          const progress = clamp(convoy.elapsed / convoy.duration, 0, 1);
+
+          // Simple path: Map Edge -> Tank -> Back
+          const tank = this.storageMeshes.get(convoy.product);
+          if (!tank) return;
+
+          const tankPos = tank.group.position;
+          const startPos = this._vectorA.set(this.mapBounds.maxX * this.tileScale, 0, this.mapBounds.maxY * this.tileScale); // Corner
+
+          // 3 trucks per convoy
+          for (let i = 0; i < 3; i++) {
+              if (truckCount >= 50) break;
+
+              const offset = i * 0.2;
+              let t = progress - offset * 0.05;
+              if (t < 0 || t > 1) continue;
+
+              if (t < 0.5) {
+                  // Arriving
+                  const localT = t * 2;
+                  tempPos.lerpVectors(startPos, tankPos, localT);
+                  tempLook.subVectors(tankPos, startPos);
+              } else {
+                  // Leaving
+                  const localT = (t - 0.5) * 2;
+                  tempPos.lerpVectors(tankPos, startPos, localT);
+                  tempLook.subVectors(startPos, tankPos);
+              }
+
+              dummy.position.copy(tempPos);
+              dummy.lookAt(tempPos.clone().add(tempLook));
+              dummy.updateMatrix();
+              this.truckMesh.setMatrixAt(truckCount++, dummy.matrix);
+
+              // Dust
+              if (Math.random() < 0.1) {
+                  this.spawnSmoke(tempPos.x, tempPos.y, tempPos.z, 0.2);
+              }
+          }
+      });
+
+      this.truckMesh.count = truckCount;
+      this.truckMesh.instanceMatrix.needsUpdate = true;
+
+      // Update Drones
+      let droneCount = 0;
+      state.inspections.forEach(insp => {
+          if (droneCount >= 20) return;
+          const unit = this.unitMeshes.get(insp.unitId);
+          if (!unit) return;
+
+          const targetPos = this._vectorA.copy(unit.group.position).add(new THREE.Vector3(0, 10, 0));
+          const startPos = this._vectorB.set(0, 20, 0); // Center high
+
+          const t = clamp(insp.elapsed / insp.duration, 0, 1);
+
+          if (t < 0.2) {
+              // Fly in
+              tempPos.lerpVectors(startPos, targetPos, t / 0.2);
+          } else if (t > 0.8) {
+              // Fly out
+              tempPos.lerpVectors(targetPos, startPos, (t - 0.8) / 0.2);
+          } else {
+              // Hover/Scan
+              tempPos.copy(targetPos);
+              tempPos.x += Math.sin(this.time * 5) * 2;
+              tempPos.z += Math.cos(this.time * 5) * 2;
+
+              // Scan effect
+              if (Math.random() < 0.05) {
+                  this.spawnScan(unit.group.position.x, unit.group.position.z, 20);
+              }
+          }
+
+          dummy.position.copy(tempPos);
+          dummy.lookAt(unit.group.position);
+          dummy.updateMatrix();
+          this.droneMesh.setMatrixAt(droneCount++, dummy.matrix);
+      });
+
+      this.droneMesh.count = droneCount;
+      this.droneMesh.instanceMatrix.needsUpdate = true;
+
+      // Update Maintenance Scaffolds
+      const unitState = this.simulation.getUnits();
+      unitState.forEach(u => {
+          const isOffline = u.status === 'offline';
+          let scaffold = this.activeScaffolds.get(u.id);
+
+          if (isOffline && !scaffold) {
+              // Create scaffold
+              const unitMesh = this.unitMeshes.get(u.id);
+              if (unitMesh) {
+                  const box = new THREE.BoxHelper(unitMesh.group, 0xffff00);
+                  this.scaffoldingGroup.add(box);
+                  scaffold = box;
+                  this.activeScaffolds.set(u.id, scaffold);
+              }
+          } else if (!isOffline && scaffold) {
+              // Remove scaffold
+              this.scaffoldingGroup.remove(scaffold);
+              this.activeScaffolds.delete(u.id);
+          }
+
+          if (scaffold) {
+              // Blink effect
+              scaffold.material.visible = Math.floor(this.time * 2) % 2 === 0;
+          }
+      });
+
+      // Update Pipe Boosts
+      // Handled in existing pipeline rendering loop by checking simulation.pipelineBoosts
+      // But we can add extra overlay here if needed.
+      if (this.simulation.pipelineBoosts) {
+          Object.keys(this.simulation.pipelineBoosts).forEach(key => {
+              const pipe = this.pipelineMeshes.get(key);
+              if (pipe) {
+                  // Pulse flow strongly
+                  pipe.glow.material.opacity = 0.5 + Math.sin(this.time * 10) * 0.4;
+                  pipe.glow.material.color.setHex(0xff00ff); // Purple boost color
+              }
+          });
+      }
   }
 
   // Effect System Methods

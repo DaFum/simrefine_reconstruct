@@ -401,6 +401,16 @@ export class UIController {
     if (typeof this.simulation.getRecorderState === "function") {
       this._renderRecorderState(this.simulation.getRecorderState());
     }
+
+    // Check for completed inspections
+    if (typeof this.simulation.getCompletedInspections === "function") {
+        const reports = this.simulation.getCompletedInspections();
+        reports.forEach(report => {
+            this.recordInspectionReport(report);
+            this.audio?.play('success'); // Notification sound
+        });
+    }
+
     this._renderLogs();
     this._updateClock();
     if (this.selectedUnitId) {

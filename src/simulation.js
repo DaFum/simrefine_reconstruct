@@ -124,6 +124,10 @@ export class RefinerySimulation {
     this.extraShipmentCooldown = 0;
     this.storageUpgrades = { level: 0 };
 
+    this.activeConvoys = [];
+    this.activeInspections = [];
+    this.completedInspections = [];
+
     // Mission System
     this.activeMission = null;
     this.missionHistory = [];
@@ -1045,7 +1049,48 @@ export class RefinerySimulation {
       logistics: logisticsReport,
     });
 
+    this._updateActionToys(deltaMinutes);
     this._updateAlerts(deltaMinutes);
+  }
+
+  _updateActionToys(deltaMinutes) {
+    // Process Convoys
+    for (let i = this.activeConvoys.length - 1; i >= 0; i--) {
+      const convoy = this.activeConvoys[i];
+      convoy.elapsed += deltaMinutes;
+
+      const ratePerMinute = convoy.totalVolume / convoy.duration;
+      const drain = Math.min(convoy.remainingVolume, ratePerMinute * deltaMinutes);
+
+      if (this.storage.levels[convoy.product] >= drain) {
+         this.storage.levels[convoy.product] -= drain;
+         convoy.remainingVolume -= drain;
+      } else {
+         // Storage empty, stop draining but keep convoy running or finish early?
+         // For visual sake, let it run but no drain.
+      }
+
+      if (convoy.elapsed >= convoy.duration || convoy.remainingVolume <= 0.01) {
+         this.pushLog("info", `Convoy returned. ${convoy.totalVolume.toFixed(0)} kb of ${this._formatProductLabel(convoy.product)} cleared.`);
+         this.activeConvoys.splice(i, 1);
+      }
+    }
+
+    // Process Inspections
+    for (let i = this.activeInspections.length - 1; i >= 0; i--) {
+       const inspection = this.activeInspections[i];
+       inspection.elapsed += deltaMinutes;
+
+       if (inspection.elapsed >= inspection.duration) {
+          const unit = this.unitMap[inspection.unitId];
+          if (unit) {
+             const report = this._buildInspectionReport(unit);
+             this.completedInspections.push(report);
+             this.pushLog("info", `Drone returned with inspection data for ${unit.name}.`, { unitId: unit.id, inspection: report });
+          }
+          this.activeInspections.splice(i, 1);
+       }
+    }
   }
 
   _unitIsAvailable(unit) {
@@ -2458,7 +2503,20 @@ export class RefinerySimulation {
       return false;
     }
 
-    storage.levels[targetProduct] = clamp(level - relief, 0, capacity);
+    // Instead of instant relief, we dispatch a convoy that drains over time
+    // storage.levels[targetProduct] = clamp(level - relief, 0, capacity);
+
+    const duration = 90; // minutes
+    const convoy = {
+       id: `convoy-${Date.now()}`,
+       product: targetProduct,
+       totalVolume: relief,
+       remainingVolume: relief,
+       duration: duration,
+       elapsed: 0
+    };
+    this.activeConvoys.push(convoy);
+
     const label = this._formatProductLabel(targetProduct);
     this.pendingOperationalCost += 260 + relief * 1.6;
     this.nextShipmentIn = Math.min(this.nextShipmentIn, 1.05);
@@ -2474,10 +2532,10 @@ export class RefinerySimulation {
 
     this.pushLog(
       "info",
-      `Convoy cleared ${relief.toFixed(0)} kb of ${label}; trucking charges booked to logistics.`,
+      `Convoy dispatched to clear ${relief.toFixed(0)} kb of ${label} over ${Math.round(duration/60*10)/10}h.`,
       { product: targetProduct }
     );
-    return { product: targetProduct, volume: relief };
+    return { product: targetProduct, volume: relief, active: true };
   }
 
   delayNextShipment({ product } = {}) {
@@ -2829,10 +2887,33 @@ export class RefinerySimulation {
       return null;
     }
 
-    const report = this._buildInspectionReport(unit);
-    const level = report.severity === "danger" ? "danger" : report.severity === "warning" ? "warning" : "info";
-    this.pushLog(level, `${unit.name} inspection: ${report.summary}`, { unitId, inspection: report });
-    return report;
+    // Check if already being inspected
+    if (this.activeInspections.some(i => i.unitId === unitId)) {
+        this.pushLog("info", "Drone already en route to this unit.");
+        return null;
+    }
+
+    this.activeInspections.push({
+        unitId,
+        duration: 45, // minutes
+        elapsed: 0
+    });
+
+    this.pushLog("info", `Drone dispatched to inspect ${unit.name}.`);
+    return { status: "pending" };
+  }
+
+  getCompletedInspections() {
+      const finished = [...this.completedInspections];
+      this.completedInspections = [];
+      return finished;
+  }
+
+  getActionToysState() {
+      return {
+          convoys: this.activeConvoys.map(c => ({...c})),
+          inspections: this.activeInspections.map(i => ({...i}))
+      };
   }
 
   _buildInspectionReport(unit) {
