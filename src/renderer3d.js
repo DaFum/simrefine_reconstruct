@@ -104,6 +104,7 @@ export class TileRenderer {
     // Initialize procedural textures for effects
     this._initEffectTextures();
     this._initActionToys();
+    this.smokePool = [];
   }
 
   setPalette(paletteDef) {
@@ -730,8 +731,12 @@ export class TileRenderer {
       if (t >= 1) {
         if (fx.mesh) {
             this.scene.remove(fx.mesh);
-            if (fx.mesh.geometry) fx.mesh.geometry.dispose();
-            if (fx.mesh.material) fx.mesh.material.dispose();
+            if (fx.type === 'smoke') {
+                this.smokePool.push(fx.mesh);
+            } else {
+                if (fx.mesh.geometry) fx.mesh.geometry.dispose();
+                if (fx.mesh.material) fx.mesh.material.dispose();
+            }
         }
         this.effects.splice(i, 1);
         continue;
@@ -817,14 +822,22 @@ export class TileRenderer {
   }
 
   spawnSmoke(x, y, z, intensity = 1) {
-     const material = new THREE.SpriteMaterial({
-         map: this.effectTextures.smoke,
-         color: 0xcccccc,
-         transparent: true,
-         opacity: 0.4,
-         blending: THREE.NormalBlending
-     });
-     const sprite = new THREE.Sprite(material);
+     let sprite;
+     if (this.smokePool.length > 0) {
+         sprite = this.smokePool.pop();
+         sprite.material.opacity = 0.4;
+         sprite.material.rotation = 0;
+         sprite.visible = true;
+     } else {
+         const material = new THREE.SpriteMaterial({
+             map: this.effectTextures.smoke,
+             color: 0xcccccc,
+             transparent: true,
+             opacity: 0.4,
+             blending: THREE.NormalBlending
+         });
+         sprite = new THREE.Sprite(material);
+     }
      sprite.position.set(x, y, z);
      const scale = 2 + Math.random() * 2;
      sprite.scale.set(scale, scale, 1);
