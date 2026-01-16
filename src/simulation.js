@@ -1,3 +1,5 @@
+import { MISSIONS } from "./content/missions.js";
+
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const randomRange = (min, max) => min + Math.random() * (max - min);
 
@@ -39,6 +41,8 @@ export class RefinerySimulation {
     this._accumulator = 0;
     this.running = true;
     this.stepOnce = false;
+
+    this.logs = [];
 
     this.params = {
       crudeIntake: 120, // kbpd
@@ -91,8 +95,7 @@ export class RefinerySimulation {
       storageJet: 0,
       storageUtilization: 0,
       shipmentReliability: 1,
-      directivesCompleted: 0,
-      directiveReliability: 1,
+      missionCompleted: false,
     };
 
     this.marketStress = 0.16;
@@ -120,9 +123,11 @@ export class RefinerySimulation {
     this.storagePressure = { active: false, throttle: 1, timer: 0, lastRatio: 0 };
     this.extraShipmentCooldown = 0;
     this.storageUpgrades = { level: 0 };
-    this.directives = [];
-    this.directiveStats = { total: 0, completed: 0, failed: 0 };
-    this._seedDirectives();
+
+    // Mission System
+    this.activeMission = null;
+    this.missionHistory = [];
+    this.startMission("tutorial_stabilize");
 
     this.shipmentHorizonHours = SHIPMENT_HORIZON_HOURS;
     this.operationalStrain = 0;
@@ -131,7 +136,6 @@ export class RefinerySimulation {
     this.emergencyShutdown = false;
     this.processTopology = this._createTopology();
 
-    this.logs = [];
     this.pushLog(
       "info",
       "Simulation initialized. Adjust the sliders to explore the refinery."
@@ -513,9 +517,9 @@ export class RefinerySimulation {
     this.storagePressure = { active: false, throttle: 1, timer: 0, lastRatio: 0 };
     this.extraShipmentCooldown = 0;
     this.storageUpgrades = { level: 0 };
-    this.directives = [];
-    this.directiveStats = { total: 0, completed: 0, failed: 0 };
-    this._seedDirectives();
+    this.activeMission = null;
+    this.missionHistory = [];
+    this.startMission("tutorial_stabilize");
     this.shipmentHorizonHours = SHIPMENT_HORIZON_HOURS;
     this.operationalStrain = 0;
     this.unitOverrides = {};
@@ -1011,7 +1015,11 @@ export class RefinerySimulation {
     this.flows.toAlkylation = alkFeed;
     this.flows.toExport = result.gasoline + result.diesel + result.jet;
 
-    this._updateDirectives(hours, { shipments: logisticsReport, metrics: this.metrics });
+    this._updateMission(hours, {
+      shipments: logisticsReport,
+      metrics: this.metrics,
+      production: result
+    });
 
     this._updateScorecard({
       profitPerHour,
@@ -1023,7 +1031,6 @@ export class RefinerySimulation {
       diesel: this.metrics.diesel,
       jet: this.metrics.jet,
       shipmentScore: this.metrics.shipmentReliability,
-      directiveScore: this.metrics.directiveReliability,
       strain: strainState.factor,
     });
 
@@ -1361,8 +1368,7 @@ export class RefinerySimulation {
         carbonScore * 0.12 +
         incidentScore * 0.1 +
         shipmentScore * 0.1 +
-        directiveScore * 0.08 +
-        strainScore * 0.08,
+        strainScore * 0.16,
       0,
       1
     );
@@ -1458,12 +1464,8 @@ export class RefinerySimulation {
       }
     }
 
-    if (typeof scores.directiveScore === "number") {
-      if (scores.directiveScore < 0.55) {
-        issues.push("Supervisors flag missed directives—align operations with shift goals.");
-      } else if (scores.directiveScore > 0.85) {
-        highlights.push("Shift directives are being crushed; crews are in sync.");
-      }
+    if (this.activeMission && this.activeMission.completed) {
+       highlights.push(`Mission '${this.activeMission.title}' objectives met.`);
     }
 
     if (issues.length) {
@@ -2911,181 +2913,97 @@ export class RefinerySimulation {
     };
   }
 
-  _seedDirectives() {
-    while (this.directives.length < 3) {
-      this.directives.push(this._createDirective());
-    }
-  }
-
-  _createDirective() {
-    const id = `dir-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
-    const roll = Math.random();
-
-    if (roll < 0.4) {
-      const duration = randomRange(8, 14);
-      const threshold = randomRange(0.74, 0.84);
-      return {
-        id,
-        type: "reliability",
-        title: `Hold reliability ≥ ${Math.round(threshold * 100)}%`,
-        description: "Keep units stable and avoid unplanned outages for the next shift.",
-        threshold,
-        duration,
-        timeRemaining: duration,
-        status: "active",
-        progress: 0,
-        progressRatio: 0,
-        cooldown: 0,
-      };
+  startMission(missionId) {
+    const missionDef = MISSIONS.find(m => m.id === missionId);
+    if (!missionDef) {
+      this.pushLog("warning", `Mission ${missionId} not found.`);
+      return;
     }
 
-    if (roll < 0.7) {
-      const products = ["gasoline", "diesel", "jet"];
-      const product = products[Math.floor(Math.random() * products.length)];
-      const base = product === "jet" ? 48 : product === "diesel" ? 60 : 72;
-      const target = Math.round(randomRange(base * 0.85, base * 1.15));
-      const duration = randomRange(12, 18);
-      return {
-        id,
-        type: "delivery",
-        title: `Stage ${target} kb ${PRODUCT_LABELS[product]}`,
-        description: "Build inventory to satisfy a contracted marine charter.",
-        product,
-        target,
-        duration,
-        timeRemaining: duration,
-        status: "active",
-        progress: 0,
-        progressRatio: 0,
-        cooldown: 0,
-      };
-    }
+    // Clone objectives so we can track progress independently
+    const objectives = missionDef.objectives.map(obj => ({ ...obj }));
 
-    const duration = randomRange(10, 16);
-    const threshold = Math.round(randomRange(64, 78));
-    return {
-      id,
-      type: "carbon",
-      title: `Hold carbon ≤ ${threshold} tCO₂-eq`,
-      description: "Throttle flaring and emissions until regulators stand-down.",
-      threshold,
-      allowance: 1.2,
-      breach: 0,
-      duration,
-      timeRemaining: duration,
-      status: "active",
-      progress: 0,
-      progressRatio: 0,
-      cooldown: 0,
+    this.activeMission = {
+      ...missionDef,
+      objectives,
+      startedAt: this.timeMinutes,
+      completed: false,
+      failed: false
     };
+
+    this.pushLog("info", `Mission Started: ${missionDef.title}`);
+    this.pushLog("info", missionDef.description);
   }
 
-  _updateDirectives(hours, context) {
-    const shipments = context?.shipments ?? { delivered: {} };
-    const metrics = context?.metrics ?? this.metrics;
+  _updateMission(hours, context) {
+    if (!this.activeMission || this.activeMission.completed || this.activeMission.failed) {
+      return;
+    }
 
-    const completed = [];
-    const failed = [];
+    const { shipments, metrics, production } = context;
+    const mission = this.activeMission;
+    let allMet = true;
 
-    this.directives.forEach((directive) => {
-      if (directive.status === "completed" || directive.status === "failed") {
-        directive.cooldown = Math.max(0, (directive.cooldown || 0) - hours);
-        return;
-      }
+    mission.objectives.forEach(obj => {
+      if (obj.completed) return;
 
-      directive.timeRemaining = Math.max(0, directive.timeRemaining - hours);
-
-      if (directive.type === "delivery") {
-        const product = directive.product;
-        const delivered = shipments.delivered?.[product] || 0;
-        if (delivered > 0) {
-          directive.progress = (directive.progress || 0) + delivered;
+      if (obj.type === "production") {
+        const produced = (production[obj.product] || 0) * hours; // kb accumulated
+        obj.progress = (obj.progress || 0) + produced;
+        if (obj.progress >= obj.target) {
+          obj.completed = true;
+          this.pushLog("info", `Objective Complete: ${obj.label}`);
+        } else {
+          allMet = false;
         }
-        directive.progressRatio = directive.target
-          ? clamp(directive.progress / directive.target, 0, 1)
-          : 0;
-        if (directive.progress >= directive.target) {
-          directive.status = "completed";
-          directive.cooldown = 6;
-          completed.push(directive);
-          this.pushLog("info", `Directive complete: ${directive.title}`);
-        } else if (directive.timeRemaining <= 0) {
-          directive.status = "failed";
-          directive.cooldown = 6;
-          failed.push(directive);
-          this.pushLog("warning", `Directive lapsed: ${directive.title}`);
+      } else if (obj.type === "delivery") {
+        const delivered = shipments.delivered?.[obj.product] || 0;
+        obj.progress = (obj.progress || 0) + delivered;
+        if (obj.progress >= obj.target) {
+          obj.completed = true;
+          this.pushLog("info", `Objective Complete: ${obj.label}`);
+        } else {
+          allMet = false;
         }
-        return;
-      }
-
-      if (directive.type === "reliability") {
-        const ratio = directive.duration
-          ? clamp(1 - directive.timeRemaining / directive.duration, 0, 1)
-          : 0;
-        directive.progressRatio = ratio;
-        if (metrics.reliability < directive.threshold) {
-          directive.status = "failed";
-          directive.cooldown = 6;
-          failed.push(directive);
-          this.pushLog("warning", `Directive failed: ${directive.title}`);
-        } else if (directive.timeRemaining <= 0) {
-          directive.status = "completed";
-          directive.cooldown = 6;
-          completed.push(directive);
-          this.pushLog("info", `Directive complete: ${directive.title}`);
-        }
-        return;
-      }
-
-      if (directive.type === "carbon") {
-        const ratio = directive.duration
-          ? clamp(1 - directive.timeRemaining / directive.duration, 0, 1)
-          : 0;
-        directive.progressRatio = ratio;
-        directive.breach = directive.breach || 0;
-        if (metrics.carbon > directive.threshold) {
-          directive.breach += hours;
-        } else if (directive.breach > 0) {
-          directive.breach = Math.max(0, directive.breach - hours * 0.5);
-        }
-        if (directive.breach >= (directive.allowance || 1)) {
-          directive.status = "failed";
-          directive.cooldown = 6;
-          failed.push(directive);
-          this.pushLog("warning", `Directive failed: ${directive.title}`);
-        } else if (directive.timeRemaining <= 0) {
-          directive.status = "completed";
-          directive.cooldown = 6;
-          completed.push(directive);
-          this.pushLog("info", `Directive complete: ${directive.title}`);
+      } else if (obj.type === "reliability") {
+        if (metrics.reliability >= obj.threshold) {
+          obj.timeRemaining = Math.max(0, obj.timeRemaining - hours);
+          if (obj.timeRemaining <= 0) {
+            obj.completed = true;
+            this.pushLog("info", `Objective Complete: ${obj.label}`);
+          } else {
+            allMet = false;
+          }
+        } else {
+          if (obj.timeRemaining < obj.duration) {
+             // Reset if dropped
+          }
+          obj.timeRemaining = obj.duration;
+          allMet = false;
         }
       }
     });
 
-    if (completed.length || failed.length) {
-      completed.forEach(() => {
-        this.directiveStats.total += 1;
-        this.directiveStats.completed += 1;
-        this.metrics.directivesCompleted += 1;
-      });
-      failed.forEach(() => {
-        this.directiveStats.total += 1;
-        this.directiveStats.failed = (this.directiveStats.failed || 0) + 1;
-      });
+    if (allMet) {
+      this.activeMission.completed = true;
+      this.metrics.missionCompleted = true; // Signal UI
+      this.missionHistory.push(this.activeMission.id);
+      this.pushLog("info", `MISSION COMPLETE: ${mission.title}`);
+      if (mission.reward) {
+        this.pushLog("info", `Reward: ${mission.reward}`);
+      }
+
+      if (mission.next) {
+        setTimeout(() => this.startMission(mission.next), 3000);
+      }
     }
+  }
 
-    this.directives = this.directives.filter(
-      (directive) => directive.status === "active" || (directive.cooldown || 0) > 0
-    );
-
-    let activeCount = this.directives.filter((directive) => directive.status === "active").length;
-    while (activeCount < 3) {
-      this.directives.push(this._createDirective());
-      activeCount += 1;
-    }
-
-    const total = this.directiveStats.total;
-    this.metrics.directiveReliability = total ? clamp(this.directiveStats.completed / total, 0, 1) : 1;
+  getMissionState() {
+    return {
+      active: this.activeMission ? { ...this.activeMission } : null,
+      history: [...this.missionHistory]
+    };
   }
 
   _updateAlerts(deltaMinutes) {
@@ -3812,8 +3730,9 @@ export class RefinerySimulation {
     } else {
       this.directives = [];
     }
-    while (this.directives.length < 3) {
-      this.directives.push(this._createDirective());
+    // Legacy directive cleanup if present in snapshot
+    if (this.directives.length > 0) {
+        this.directives = [];
     }
 
     if (snapshot.directiveStats && typeof snapshot.directiveStats === "object") {

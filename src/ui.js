@@ -76,7 +76,7 @@ export class UIController {
       mapLogisticsJet: document.getElementById("map-logistics-jet"),
       shipmentList: document.getElementById("shipment-list"),
       shipmentReliability: document.getElementById("shipment-reliability"),
-      directiveList: document.getElementById("directive-list"),
+      missionPanel: document.getElementById("directive-list"), // Renaming to missionPanel internally, keeping DOM id for now
       speedControls: document.getElementById("speed-controls"),
       speedReadout: document.getElementById("speed-readout"),
       logisticsExpedite: document.getElementById("logistics-expedite"),
@@ -411,7 +411,7 @@ export class UIController {
     }
     const logistics = logisticsState || this.simulation.getLogisticsState();
     this._renderLogistics(logistics);
-    this._renderDirectives(this.simulation.getDirectives());
+    this._renderMission(this.simulation.getMissionState());
   }
 
   refreshControls() {
@@ -1093,92 +1093,109 @@ export class UIController {
     return item;
   }
 
-  _renderDirectives(directives) {
-    const list = this.elements.directiveList;
+  _renderMission(missionState) {
+    const list = this.elements.missionPanel;
     if (!list) {
       return;
     }
     list.innerHTML = "";
-    const entries = Array.isArray(directives) ? [...directives] : [];
-    const statusOrder = { active: 0, completed: 1, failed: 2 };
 
-    entries
-      .sort((a, b) => {
-        const aStatus = statusOrder[a.status] ?? 3;
-        const bStatus = statusOrder[b.status] ?? 3;
-        if (aStatus !== bStatus) {
-          return aStatus - bStatus;
-        }
-        return (a.timeRemaining ?? 0) - (b.timeRemaining ?? 0);
-      })
-      .forEach((directive) => {
-        list.appendChild(this._renderDirectiveItem(directive));
-      });
-
-    if (!entries.length) {
+    const mission = missionState?.active;
+    if (!mission) {
       const empty = document.createElement("li");
       empty.classList.add("directive", "empty");
-      empty.textContent = "No directives issued.";
+      empty.textContent = "No active mission.";
       list.appendChild(empty);
+      return;
     }
-  }
 
-  _renderDirectiveItem(directive) {
+    // Play sound if recently completed
+    if (mission.completed && !this.lastMissionCompletePlayed) {
+        this.audio?.play('success'); // Assuming 'success' or use 'click'
+        this.lastMissionCompletePlayed = true;
+    } else if (!mission.completed) {
+        this.lastMissionCompletePlayed = false;
+    }
+
     const item = document.createElement("li");
-    const status = directive.status || "active";
-    item.classList.add("directive", status);
+    item.classList.add("directive", mission.completed ? "completed" : "active");
 
     const header = document.createElement("div");
     header.classList.add("directive-header");
     const title = document.createElement("span");
     title.classList.add("directive-title");
-    title.textContent = directive.title;
+    title.textContent = mission.title;
     header.appendChild(title);
 
     const statusLabel = document.createElement("span");
     statusLabel.classList.add("directive-status");
-    if (status === "active") {
-      statusLabel.textContent = directive.timeRemaining > 0
-        ? `${this._formatHours(directive.timeRemaining)} left`
-        : "Due now";
-    } else if (status === "completed") {
-      statusLabel.textContent = "Completed";
-    } else {
-      statusLabel.textContent = "Failed";
-    }
+    statusLabel.textContent = mission.completed ? "COMPLETE" : "ACTIVE";
     header.appendChild(statusLabel);
     item.appendChild(header);
 
-    if (directive.description) {
-      const description = document.createElement("p");
-      description.textContent = directive.description;
-      item.appendChild(description);
-    }
+    const description = document.createElement("p");
+    description.textContent = mission.description;
+    item.appendChild(description);
 
-    const meta = document.createElement("div");
-    meta.classList.add("directive-meta");
-    if (directive.type === "delivery") {
-      const progress = directive.progress || 0;
-      meta.textContent = `${Math.min(progress, directive.target).toFixed(0)} / ${directive.target.toFixed(
-        0
-      )} kb staged`;
-    } else if (directive.type === "reliability") {
-      meta.textContent = `Maintain ≥ ${Math.round((directive.threshold || 0) * 100)}%`;
-    } else if (directive.type === "carbon") {
-      meta.textContent = `Cap at ${directive.threshold} tCO₂-eq`;
-    }
-    item.appendChild(meta);
+    // Objectives
+    const objectivesList = document.createElement("ul");
+    objectivesList.className = "mission-objectives";
+    objectivesList.style.marginTop = "0.5rem";
+    objectivesList.style.paddingLeft = "0";
+    objectivesList.style.listStyle = "none";
 
-    const progressBar = document.createElement("div");
-    progressBar.classList.add("directive-progress");
-    const fill = document.createElement("div");
-    fill.classList.add("fill");
-    const ratio = Math.min(Math.max(directive.progressRatio ?? 0, 0), 1);
-    fill.style.width = `${Math.round(ratio * 100)}%`;
-    progressBar.appendChild(fill);
-    item.appendChild(progressBar);
+    mission.objectives.forEach(obj => {
+        const objItem = document.createElement("li");
+        objItem.style.marginBottom = "0.5rem";
 
-    return item;
+        const labelRow = document.createElement("div");
+        labelRow.style.display = "flex";
+        labelRow.style.justifyContent = "space-between";
+        labelRow.style.fontSize = "0.85rem";
+
+        const label = document.createElement("span");
+        label.textContent = obj.label;
+        if (obj.completed) label.style.color = "var(--color-success, #4ade80)";
+
+        const value = document.createElement("span");
+        if (obj.type === "production" || obj.type === "delivery") {
+            value.textContent = `${Math.min(obj.progress || 0, obj.target).toFixed(0)} / ${obj.target}`;
+        } else if (obj.type === "reliability") {
+            if (obj.completed) {
+                value.textContent = "Done";
+            } else {
+                value.textContent = `${obj.timeRemaining.toFixed(1)}h left`;
+            }
+        }
+
+        labelRow.appendChild(label);
+        labelRow.appendChild(value);
+        objItem.appendChild(labelRow);
+
+        const progress = document.createElement("div");
+        progress.className = "directive-progress";
+        const fill = document.createElement("div");
+        fill.className = "fill";
+
+        let ratio = 0;
+        if (obj.completed) {
+            ratio = 1;
+        } else if (obj.type === "production" || obj.type === "delivery") {
+            ratio = Math.min((obj.progress || 0) / obj.target, 1);
+        } else if (obj.type === "reliability") {
+            ratio = Math.max(0, 1 - (obj.timeRemaining / obj.duration));
+        }
+
+        fill.style.width = `${ratio * 100}%`;
+        if (obj.completed) fill.style.backgroundColor = "var(--color-success, #4ade80)";
+
+        progress.appendChild(fill);
+        objItem.appendChild(progress);
+        objectivesList.appendChild(objItem);
+    });
+
+    item.appendChild(objectivesList);
+    list.appendChild(item);
   }
 
   _formatFlow(value) {
