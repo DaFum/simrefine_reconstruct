@@ -2154,6 +2154,12 @@ function createLabelSprite(text, fill = 0xf0f6ff) {
   return sprite;
 }
 
+/**
+ * Erzeugt eine Canvas-Textur mit gerendertem Beschriftungstext.
+ * @param {string|number} text - Der anzuzeigende Text.
+ * @param {string|number} fillColor - Textfarbe; kann als CSS-Farbstring oder als numerischer Hex-Wert (z. B. 0xff0000) angegeben werden.
+ * @returns {THREE.CanvasTexture} Eine CanvasTexture mit dem gerenderten Label. Die Textur wird so konfiguriert, dass sie im sRGB-Farbraum ausgegeben wird.
+ */
 function makeLabelTexture(text, fillColor) {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
@@ -2180,6 +2186,14 @@ function makeLabelTexture(text, fillColor) {
   return texture;
 }
 
+/**
+ * Erstellt eine weiche, radial verlaufende Rauchtextur als THREE.CanvasTexture.
+ *
+ * Die Textur wird auf einem 64×64 Canvas gerendert und verwendet einen radialen
+ * Alpha-Gradienten von fast opak in der Mitte zu transparent am Rand, geeignet
+ * für Rauch- oder Glow-Sprites.
+ * @returns {THREE.CanvasTexture} Eine CanvasTexture mit radialem Weiß-zu-Transparent-Gradienten.
+ */
 function createSmokeTexture() {
     const canvas = document.createElement("canvas");
     canvas.width = 64;
@@ -2197,6 +2211,13 @@ function createSmokeTexture() {
     return texture;
 }
 
+/**
+ * Erzeugt eine kleine radialen Glow-Textur zur Verwendung als Sprite- oder Effekt-Texture.
+ *
+ * Die Textur ist ein 32×32 CanvasTexture mit einem weißen, radialen Farbverlauf
+ * von voller Deckkraft in der Mitte zu transparent am Rand.
+ * @returns {THREE.CanvasTexture} Eine CanvasTexture mit radialem weiß-zu-transparent-Gradienten (32×32).
+ */
 function createGlowTexture() {
     const canvas = document.createElement("canvas");
     canvas.width = 32;
@@ -2214,6 +2235,11 @@ function createGlowTexture() {
     return texture;
 }
 
+/**
+ * Erzeugt eine quadratische Ease-in-out-Kurve für einen Interpolationsfaktor.
+ * @param {number} t - Interpolationsfaktor, üblicherweise im Bereich 0 bis 1.
+ * @returns {number} Glätteter Wert im Bereich 0 bis 1: beschleunigt bis zur Mitte und verzögert danach.
+ */
 function easeInOut(t) {
   const clamped = clamp(t, 0, 1);
   return clamped < 0.5 ? 2 * clamped * clamped : 1 - Math.pow(-2 * clamped + 2, 2) / 2;
