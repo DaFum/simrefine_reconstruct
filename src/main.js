@@ -1691,6 +1691,7 @@ function handleToolbarCommand(command) {
       if (success && selectedUnitId) {
         highlightPipelinesForUnit(selectedUnitId);
         renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: true });
+        renderer.triggerPipelineBoost(selectedUnitId);
       }
       break;
     }

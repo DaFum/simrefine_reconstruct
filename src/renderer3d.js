@@ -2,6 +2,7 @@ import * as THREE from "../vendor/three.module.js";
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const lerp = (start, end, t) => start + (end - start) * t;
+const damp = (current, target, lambda, dt) => lerp(current, target, 1 - Math.exp(-lambda * dt));
 
 const DEFAULT_OPTIONS = {
   interactionEnabled: true,
@@ -84,6 +85,7 @@ export class TileRenderer {
     this.quayMesh = null;
     this.groundDetailLayer = null;
     this.groundDetailMaterials = [];
+    this.effects = []; // Visual effects (particles, ripples)
     this._vectorA = new THREE.Vector3();
     this._vectorB = new THREE.Vector3();
 
@@ -98,6 +100,9 @@ export class TileRenderer {
     this.resizeToContainer(container);
     this._applyPalette(true);
     this._updateCamera();
+
+    // Initialize procedural textures for effects
+    this._initEffectTextures();
   }
 
   getSurface() {
@@ -150,8 +155,18 @@ export class TileRenderer {
   }
 
   setSelectedUnit(unitId) {
+    const previous = this.selectedUnitId;
     this.selectedUnitId = unitId || null;
     this.selectionPulse = 0;
+
+    if (this.selectedUnitId && this.selectedUnitId !== previous) {
+      const unit = this.unitMeshes.get(this.selectedUnitId);
+      if (unit) {
+        const worldPos = unit.group.position.clone();
+        this.spawnRipple(worldPos.x, worldPos.z);
+        this.spawnScan(worldPos.x, worldPos.z, 15);
+      }
+    }
   }
 
   setHoverUnit(unitId) {
@@ -178,6 +193,13 @@ export class TileRenderer {
     }
     this.time += deltaSeconds;
     this.selectionPulse += deltaSeconds;
+
+    // Smooth camera damping
+    const smoothing = 4.0;
+    this.cameraTarget.x = damp(this.cameraTarget.x, this.desiredCameraTarget.x, smoothing, deltaSeconds);
+    this.cameraTarget.y = damp(this.cameraTarget.y, this.desiredCameraTarget.y, smoothing, deltaSeconds);
+    this.cameraTarget.z = damp(this.cameraTarget.z, this.desiredCameraTarget.z, smoothing, deltaSeconds);
+    this._updateCamera();
 
     const unitState = new Map((this.simulation?.getUnits?.() || []).map((entry) => [entry.id, entry]));
     const palette = this._getPalette();
@@ -222,6 +244,18 @@ export class TileRenderer {
       unit.highlight.scale.set(scaleBoost, 1, scaleBoost);
 
       unit.label.material.opacity = highlightActive || hoverActive ? 1 : 0.85;
+
+      // Incident Effects (Smoke/Blink)
+      if (alert > 0.3) {
+        if (Math.random() < alert * deltaSeconds * 4) {
+          const spawnHeight = 4 + Math.random() * 6;
+          const pos = unit.group.position.clone();
+          pos.x += (Math.random() - 0.5) * 4;
+          pos.z += (Math.random() - 0.5) * 4;
+          pos.y += spawnHeight;
+          this.spawnSmoke(pos.x, pos.y, pos.z, alert);
+        }
+      }
     }
 
     const storageLevels = logistics.storage?.levels || {};
@@ -306,6 +340,7 @@ export class TileRenderer {
       this.pointerMesh.material.opacity = clamp(hoverGlow, 0.15, 0.85);
     }
 
+    this._updateEffects(deltaSeconds);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -389,8 +424,14 @@ export class TileRenderer {
     const forward = new THREE.Vector3();
     right.subVectors(this.camera.position, this.cameraTarget).cross(new THREE.Vector3(0, 1, 0)).setY(0).normalize();
     forward.copy(right).cross(new THREE.Vector3(0, 1, 0)).normalize();
-    this.cameraTarget.addScaledVector(right, -deltaX * moveScale);
-    this.cameraTarget.addScaledVector(forward, deltaY * moveScale);
+
+    // Nudge both current and desired target
+    const dx = right.multiplyScalar(-deltaX * moveScale);
+    const dy = forward.multiplyScalar(deltaY * moveScale);
+
+    this.cameraTarget.add(dx).add(dy);
+    this.desiredCameraTarget.add(dx).add(dy);
+
     this._updateCamera();
   }
 
@@ -398,7 +439,11 @@ export class TileRenderer {
     this.cameraAngles.azimuth = this.defaultCameraAngles.azimuth;
     this.cameraAngles.polar = this.defaultCameraAngles.polar;
     this.cameraDistance = this.defaultCameraDistance;
-    this.cameraTarget.copy(this.defaultCameraTarget);
+
+    // Smooth reset
+    this.desiredCameraTarget.copy(this.defaultCameraTarget);
+    // this.cameraTarget will damp towards it
+
     this._updateCamera();
   }
 
@@ -415,8 +460,8 @@ export class TileRenderer {
         return;
       }
     }
-    this.cameraTarget.lerp(worldPos, 0.6);
-    this._updateCamera();
+    // Update desired target instead of hard lerp
+    this.desiredCameraTarget.copy(worldPos);
   }
 
   focusOnLogistics({ onlyIfVisible = false } = {}) {
@@ -431,8 +476,191 @@ export class TileRenderer {
         return;
       }
     }
-    this.cameraTarget.lerp(target, 0.6);
-    this._updateCamera();
+    // Update desired target
+    this.desiredCameraTarget.copy(target);
+  }
+
+  triggerPipelineBoost(unitId) {
+    if (!unitId || !this.pipelineDefs) return;
+
+    // Find pipelines connected to this unit
+    const pipelines = this.pipelineDefs.filter(def => {
+       const isStart = def.path && def.path[0] && def.path[0].unit === unitId;
+       const isEnd = def.path && def.path[def.path.length-1] && def.path[def.path.length-1].unit === unitId;
+       return isStart || isEnd;
+    });
+
+    pipelines.forEach(def => {
+       const mesh = this.pipelineMeshes.get(def.id);
+       if (mesh && mesh.mesh.geometry) {
+          // Use curve points if available, or approximate path
+          // The TubeGeometry has a path
+          const curve = mesh.mesh.geometry.parameters.path;
+          if (curve) {
+             this.spawnPulse(curve);
+          }
+       }
+    });
+  }
+
+  // Effect System Methods
+
+  _initEffectTextures() {
+    this.effectTextures = {
+        smoke: createSmokeTexture(),
+        glow: createGlowTexture()
+    };
+  }
+
+  _updateEffects(dt) {
+    for (let i = this.effects.length - 1; i >= 0; i--) {
+      const fx = this.effects[i];
+      fx.age += dt;
+      const t = fx.age / fx.duration;
+
+      if (t >= 1) {
+        if (fx.mesh) {
+            this.scene.remove(fx.mesh);
+            if (fx.mesh.geometry) fx.mesh.geometry.dispose();
+            if (fx.mesh.material) fx.mesh.material.dispose();
+        }
+        this.effects.splice(i, 1);
+        continue;
+      }
+
+      // Update specific effect types
+      if (fx.type === "ripple") {
+        const scale = 1 + t * fx.maxScale;
+        fx.mesh.scale.set(scale, scale, 1);
+        fx.mesh.material.opacity = (1 - t) * fx.initialOpacity;
+      } else if (fx.type === "scan") {
+         fx.mesh.position.y = fx.baseY + t * fx.height;
+         fx.mesh.material.opacity = Math.sin((1-t) * Math.PI) * fx.initialOpacity;
+      } else if (fx.type === "smoke") {
+         fx.mesh.position.y += fx.speedY * dt;
+         fx.mesh.position.x += fx.driftX * dt;
+         fx.mesh.position.z += fx.driftZ * dt;
+         const scale = fx.initialScale * (1 + t * 2);
+         fx.mesh.scale.set(scale, scale, 1);
+         fx.mesh.material.opacity = (1 - t) * fx.initialOpacity;
+         fx.mesh.rotation.z += fx.rotationSpeed * dt;
+      } else if (fx.type === "pulse") {
+         const progress = t;
+         const point = fx.path.getPoint(progress);
+         fx.mesh.position.copy(point);
+         // Pulse scale
+         const s = 1.5 + Math.sin(t * Math.PI * 8) * 0.5;
+         fx.mesh.scale.set(s, s, s);
+      }
+    }
+  }
+
+  spawnRipple(x, z) {
+    const geometry = new THREE.RingGeometry(0.5, 0.8, 32);
+    const material = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.2, z);
+
+    this.scene.add(mesh);
+    this.effects.push({
+        type: "ripple",
+        mesh,
+        age: 0,
+        duration: 1.2,
+        maxScale: 6,
+        initialOpacity: 0.8
+    });
+  }
+
+  spawnScan(x, z, height) {
+      const geometry = new THREE.CylinderGeometry(8, 8, 0.5, 32, 1, true);
+      const material = new THREE.MeshBasicMaterial({
+          color: 0x66f5ff,
+          transparent: true,
+          opacity: 0.4,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, 0, z);
+      this.scene.add(mesh);
+
+      this.effects.push({
+          type: "scan",
+          mesh,
+          baseY: 0,
+          height: height,
+          age: 0,
+          duration: 0.8,
+          initialOpacity: 0.4
+      });
+  }
+
+  spawnSmoke(x, y, z, intensity = 1) {
+     const material = new THREE.SpriteMaterial({
+         map: this.effectTextures.smoke,
+         color: 0xcccccc,
+         transparent: true,
+         opacity: 0.4,
+         blending: THREE.NormalBlending
+     });
+     const sprite = new THREE.Sprite(material);
+     sprite.position.set(x, y, z);
+     const scale = 2 + Math.random() * 2;
+     sprite.scale.set(scale, scale, 1);
+
+     this.scene.add(sprite);
+
+     this.effects.push({
+         type: "smoke",
+         mesh: sprite,
+         age: 0,
+         duration: 2 + Math.random() * 2,
+         initialScale: scale,
+         initialOpacity: 0.4 * intensity,
+         speedY: 2 + Math.random(),
+         driftX: (Math.random() - 0.5) * 1,
+         driftZ: (Math.random() - 0.5) * 1,
+         rotationSpeed: (Math.random() - 0.5) * 1
+     });
+  }
+
+  spawnPulse(path) {
+      // Multiple particles for a flow effect
+      const count = 5;
+      for (let i=0; i<count; i++) {
+          const delay = i * 0.15;
+          const material = new THREE.SpriteMaterial({
+              map: this.effectTextures.glow,
+              color: 0xffd700,
+              transparent: true,
+              opacity: 1,
+              blending: THREE.AdditiveBlending
+          });
+          const sprite = new THREE.Sprite(material);
+          sprite.scale.set(1.5, 1.5, 1);
+          sprite.position.copy(path.getPoint(0));
+
+          // Delay start by manipulating age/duration? No, better to spawn them delayed.
+          // Simplification: spawn one, let others follow if needed.
+          // Actually, let's just spawn one "packet" which is a group?
+          // I'll spawn distinct sprites with offset negative age if I could, but loop simpler:
+
+          this.scene.add(sprite);
+          this.effects.push({
+              type: "pulse",
+              mesh: sprite,
+              path: path,
+              age: -delay, // negative age for delay
+              duration: 1.5 // time to travel path?
+          });
+      }
   }
 
   _computeBounds() {
@@ -485,6 +713,9 @@ export class TileRenderer {
     this.defaultCameraAngles = { ...this.cameraAngles };
     this.defaultCameraDistance = this.cameraDistance;
     this.defaultCameraTarget = centerWorld.clone();
+
+    // Initialize desired target for damping
+    this.desiredCameraTarget = this.cameraTarget.clone();
 
     this.raycaster = new THREE.Raycaster();
     this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -1778,6 +2009,40 @@ function makeLabelTexture(text, fillColor) {
   }
   texture.needsUpdate = true;
   return texture;
+}
+
+function createSmokeTexture() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255,255,255,0.8)");
+    grad.addColorStop(0.4, "rgba(255,255,255,0.2)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+}
+
+function createGlowTexture() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext("2d");
+    const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.5, "rgba(255,255,255,0.3)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 32, 32);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
 }
 
 function easeInOut(t) {
