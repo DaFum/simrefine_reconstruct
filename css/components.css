@@ -24,7 +24,10 @@
   background: linear-gradient(180deg, var(--header-grad-top), var(--header-grad-bottom));
   color: var(--header-text);
   border-bottom: 1px solid rgba(0, 0, 0, 0.35);
-  cursor: default; /* Will be grab for draggable */
+  cursor: grab; /* Indicates draggable window title */
+}
+.window-title:active {
+  cursor: grabbing;
 }
 
 .window-body {

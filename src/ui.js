@@ -132,6 +132,9 @@ export class UIController {
     });
 
     bus.on("CONVOY_DISPATCHED", (data) => {
+        if (!data || !data.product) {
+          return;
+        }
         this.flashStorageLevel(data.product);
     });
 
@@ -420,14 +423,7 @@ export class UIController {
       this._renderRecorderState(this.simulation.getRecorderState());
     }
 
-    // Check for completed inspections
-    if (typeof this.simulation.getCompletedInspections === "function") {
-        const reports = this.simulation.getCompletedInspections();
-        reports.forEach(report => {
-            this.recordInspectionReport(report);
-            this.audio?.play('success'); // Notification sound
-        });
-    }
+    // Removed direct polling of getCompletedInspections as it is now handled by event listener
 
     this._renderLogs();
     this._updateClock();
