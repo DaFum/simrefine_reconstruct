@@ -267,6 +267,10 @@ eventBus.on("MAINTENANCE_SCHEDULED", ({ unitId }) => {
     }
 });
 
+/**
+ * Aktualisiert den Aufnahme-Schalter in der Toolbar entsprechend dem aktuellen Aufnahmezustand.
+ * @param {boolean} active - `true`, wenn Aufnahme aktiv ist; `false` andernfalls. Beeinflusst CSS-Klasse, ARIA-Attribut und sichtbaren Button-Text.
+ */
 function updateRecordButtonState(active) {
   if (!recordToolbarButton) {
     return;
@@ -606,6 +610,13 @@ surface.addEventListener("click", (event) => {
 const previousAlerts = new Map();
 
 const clock = { last: performance.now() };
+/**
+ * Treibt die Simulation voran, rendert den aktuellen Frame und plant den nächsten Animationsschritt.
+ *
+ * Aktualisiert den Simulationszustand anhand der verstrichenen Zeit, synchronisiert Recorder-, Logistik- und Flow-Zustände mit UI und Renderer, aktualisiert die Unit-Pulse-Anzeige und fordert den nächsten Aufruf via requestAnimationFrame an.
+ *
+ * @param {number} now - High‑resolution Zeitstempel in Millisekunden (wie von requestAnimationFrame bereitgestellt).
+ */
 function animate(now) {
   const delta = (now - clock.last) / 1000;
   clock.last = now;
@@ -673,6 +684,12 @@ function updateScenarioButtons(key) {
   updateScenarioMenuActive(key);
 }
 
+/**
+ * Initialisiert und verbindet alle Menü-Interaktionen und zugehörigen Event-Handler der Benutzeroberfläche.
+ *
+ * Registriert Klick- und Hover-Handler für Menü-Buttons, verarbeitet Menüeintragsaktionen (Scenario-Auswahl, Unit-Auswahl und benannte Aktionen),
+ * schließt Menüs bei Klick außerhalb oder bei Escape, bindet den Hauptmenü-Umschalter zum Start/Stop der Simulation und verbindet das Import-Input mit dem Snapshot-Importer.
+ */
 function initializeMenus() {
   if (!menuBar) {
     return;
@@ -737,6 +754,16 @@ function initializeMenus() {
   }
 }
 
+/**
+ * Schaltet den Sicht- und ARIA-Zustand eines Menü-Elements um und verwaltet die aktuell geöffnete Menüreferenz.
+ *
+ * Öffnet oder schließt das übergebene DOM-Element als Menü: spielt den passenden Audioclip
+ * ("open" bzw. "close"), fügt die CSS-Klasse "open" hinzu oder entfernt sie, setzt
+ * das Attribut `aria-expanded` des enthaltenen `.menu-item`-Buttons falls vorhanden,
+ * ruft beim Öffnen `closeMenus()` auf und aktualisiert die globale Variable `activeMenu`.
+ *
+ * @param {HTMLElement|null} menu - Das Menü-DOM-Element, das umgeschaltet werden soll. Bei `null` passiert nichts.
+ */
 function toggleMenu(menu) {
   if (!menu) return;
   const button = menu.querySelector(".menu-item");
@@ -759,6 +786,11 @@ function toggleMenu(menu) {
   }
 }
 
+/**
+ * Schließt alle aktuell geöffneten Menüs und setzt die Menü-Zustände zurück.
+ *
+ * Entfernt den visuellen Offen-Status von Menüelementen, setzt das `aria-expanded`-Attribut der zugehörigen Schaltflächen auf `"false"`, spielt bei vorhandenen offenen Menüs den Schließ-Sound ab und setzt `activeMenu` auf `null`.
+ */
 function closeMenus() {
   if (!menuBar) return;
   const openMenus = menuBar.querySelectorAll(".menu.open");
@@ -1664,6 +1696,12 @@ function clearPipelineHighlight() {
   renderer.setHighlightedPipelines([]);
 }
 
+/**
+ * Setzt die aktuell ausgewählte Einheit und synchronisiert UI, Renderer und Kontext.
+ *
+ * Aktualisiert die interne Auswahl (oder entfernt sie, wenn kein Wert übergeben wird), informiert den Renderer, passt die Unit-Buttons und die Toolbar-Kontextaktion an und sorgt dafür, dass die zugehörigen Pipelines hervorgehoben oder die Hervorhebung entfernt werden.
+ * @param {string|null|undefined} unitId - Die ID der auszuwählenden Einheit; bei `null`/`undefined` oder leerem Wert wird die Auswahl aufgehoben.
+ */
 function setSelectedUnit(unitId) {
   selectedUnitId = unitId || null;
   renderer.setSelectedUnit(selectedUnitId);
@@ -1676,6 +1714,15 @@ function setSelectedUnit(unitId) {
   }
 }
 
+/**
+ * Aktualisiert die kontextabhängigen Toolbar-Schaltflächen und zeigt einen passenden Hinweis an.
+ *
+ * Aktiviert die Befehle "inspection", "build-pipe" und "bulldoze", wenn eine Einheit ausgewählt ist;
+ * deaktiviert sie andernfalls und passt die visuelle Darstellung an. Zeigt außerdem einen UI-Hinweis,
+ * der entweder die aktuelle Einheits-ID oder eine Aufforderung zur Auswahl einer Einheit enthält.
+ *
+ * @param {string|undefined|null} unitId - Die ID der aktuell ausgewählten Einheit; `undefined` oder `null` entfernt die Auswahl.
+ */
 function updateToolbarContext(unitId) {
   const contextButtons = mapToolbar.querySelectorAll('button[data-command]');
   contextButtons.forEach(btn => {
@@ -1698,6 +1745,18 @@ function updateToolbarContext(unitId) {
   }
 }
 
+/**
+ * Führt die durch eine Toolbar-Aktion bezeichnete Operation aus.
+ *
+ * Unterstützte Befehle und ihr Effekt:
+ * - "record-demo": schaltet die Performance-Aufzeichnung um und aktualisiert die Aufnahmetaste.
+ * - "inspection": startet eine Inspektion; wenn keine Einheit ausgewählt ist, wird eine allgemeine Inspektion ausgelöst, sonst wird die Inspektion für die ausgewählte Einheit angefordert.
+ * - "build-road": löst den Versand eines Konvois aus.
+ * - "build-pipe": fordert das Bereitstellen eines Pipeline-Bypasses für die ausgewählte Einheit an.
+ * - "bulldoze": plant Wartungs-/Entfernungsarbeiten für die ausgewählte Einheit.
+ *
+ * @param {string} command - Einer der unterstützten Befehls-Schlüssel: "record-demo", "inspection", "build-road", "build-pipe" oder "bulldoze".
+ */
 function handleToolbarCommand(command) {
   switch (command) {
     case "record-demo":
