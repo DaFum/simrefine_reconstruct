@@ -170,3 +170,23 @@ describe('ModuleName', () => {
 ## 📊 Expected Results
 
 When you run `npm test`, you should see:
+
+### Success Output
+```
+ Test Files  6 passed (6)
+      Tests  178 passed (178)
+   Start at  13:39:05
+   Duration  2.30s (transform 363ms, setup 127ms, import 448ms, tests 320ms, environment 4.68s)
+```
+
+### Failure Output (Example)
+If a test fails (e.g., AudioController initialization), you will see:
+```
+ FAIL  tests/unit/audio.test.js > AudioController > constructor > should initialize with null context and disabled state
+AssertionError: expected { context: AudioContext, masterGain: GainNode, ... } to be null
+ ❯ tests/unit/audio.test.js:18:28
+     16|   describe('constructor', () => {
+     17|     it('should initialize with null context and disabled state', () => {
+     18|       expect(audio.context).toBeNull();
+       |                            ^
+```

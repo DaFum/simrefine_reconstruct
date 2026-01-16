@@ -6,9 +6,17 @@ export class AudioController {
     this.sounds = new Map();
 
     // Attempt to initialize on user interaction
-    const init = () => {
+    this._initHandler = () => {
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) {
+        window.removeEventListener('click', this._initHandler);
+        window.removeEventListener('keydown', this._initHandler);
+        this.enabled = false;
+        return;
+      }
+
       if (!this.context) {
-        this.context = new (window.AudioContext || window.webkitAudioContext)();
+        this.context = new AudioCtor();
         this.masterGain = this.context.createGain();
         this.masterGain.gain.value = 0.3; // Default volume
         this.masterGain.connect(this.context.destination);
@@ -18,12 +26,24 @@ export class AudioController {
       if (this.context.state === 'suspended') {
         this.context.resume();
       }
-      window.removeEventListener('click', init);
-      window.removeEventListener('keydown', init);
+      window.removeEventListener('click', this._initHandler);
+      window.removeEventListener('keydown', this._initHandler);
     };
 
-    window.addEventListener('click', init);
-    window.addEventListener('keydown', init);
+    window.addEventListener('click', this._initHandler);
+    window.addEventListener('keydown', this._initHandler);
+  }
+
+  destroy() {
+    if (this._initHandler) {
+      window.removeEventListener('click', this._initHandler);
+      window.removeEventListener('keydown', this._initHandler);
+    }
+    if (this.context) {
+      this.context.close();
+      this.context = null;
+    }
+    this.enabled = false;
   }
 
   _generateSounds() {

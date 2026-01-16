@@ -112,6 +112,11 @@ export class TileRenderer {
       this._applyPalette(false);
   }
 
+  clearCustomPalette() {
+      this.customPalette = null;
+      this._applyPalette(false);
+  }
+
   getSurface() {
     return this.renderer?.domElement;
   }
@@ -153,6 +158,7 @@ export class TileRenderer {
   }
 
   cyclePalette() {
+    this.clearCustomPalette();
     this.paletteIndex = (this.paletteIndex + 1) % PALETTES.length;
     this._applyPalette(false);
   }
@@ -647,6 +653,13 @@ export class TileRenderer {
           } else if (!isOffline && scaffold) {
               // Remove scaffold
               this.scaffoldingGroup.remove(scaffold);
+              scaffold.traverse(child => {
+                  if (child.geometry) child.geometry.dispose();
+                  if (child.material) {
+                      if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                      else child.material.dispose();
+                  }
+              });
               this.activeScaffolds.delete(u.id);
           }
 
@@ -657,15 +670,43 @@ export class TileRenderer {
       });
 
       // Update Pipe Boosts
-      // Handled in existing pipeline rendering loop by checking simulation.pipelineBoosts
-      // But we can add extra overlay here if needed.
       if (this.simulation.pipelineBoosts) {
-          Object.keys(this.simulation.pipelineBoosts).forEach(key => {
+          const activeBoosts = new Set(Object.keys(this.simulation.pipelineBoosts));
+          // Apply active boosts
+          activeBoosts.forEach(key => {
               const pipe = this.pipelineMeshes.get(key);
               if (pipe) {
                   // Pulse flow strongly
                   pipe.glow.material.opacity = 0.5 + Math.sin(this.time * 10) * 0.4;
                   pipe.glow.material.color.setHex(0xff00ff); // Purple boost color
+              }
+          });
+
+          // Restore defaults for non-boosted pipes handled here if needed?
+          // Actually the main render loop updates `emissiveIntensity` based on flow ratio and highlight.
+          // But `pipe.glow.material.color` and high opacity set above persist.
+          // We need to reset pipes that are NOT in activeBoosts but might have been boosted before?
+          // Or just iterate all pipes and reset if not boosted?
+          // Simpler: iterate all pipes, check if boosted.
+
+          this.pipelineMeshes.forEach((pipe, key) => {
+              if (!activeBoosts.has(key)) {
+                  // Revert to standard glow behavior (handled in render loop mostly, but color needs reset)
+                  // The render loop sets opacity based on flow, but we overrode it above.
+                  // And we changed color.
+                  // We need to restore the color to what `_applyPalette` or base color sets.
+                  // The render loop calculates `glow.material.emissiveIntensity` but not color.
+                  // Wait, render loop does:
+                  // pipeline.glow.material.emissiveIntensity = this.flowVisible ? baseIntensity * 0.6 + dynamicIntensity * 0.9 : 0.0;
+                  // But we set `pipe.glow.material.opacity` above, which might be different from emissiveIntensity?
+                  // The material is transparent, so opacity matters.
+                  // The render loop does NOT touch opacity for glow, only emissiveIntensity.
+                  // Actually `glowMaterial` has `opacity: 0.45` initially.
+
+                  pipe.glow.material.opacity = 0.45;
+                  // Revert color to baseColor mixed with white as in _createPipelines or _applyPalette
+                  // We can re-derive it:
+                  pipe.glow.material.color.copy(pipe.baseColor.clone().lerp(new THREE.Color(0xffffff), 0.35));
               }
           });
       }
@@ -713,12 +754,17 @@ export class TileRenderer {
          fx.mesh.material.opacity = (1 - t) * fx.initialOpacity;
          fx.mesh.rotation.z += fx.rotationSpeed * dt;
       } else if (fx.type === "pulse") {
-         const progress = t;
-         const point = fx.path.getPoint(progress);
-         fx.mesh.position.copy(point);
-         // Pulse scale
-         const s = 1.5 + Math.sin(t * Math.PI * 8) * 0.5;
-         fx.mesh.scale.set(s, s, s);
+         const progress = clamp(t, 0, 1);
+         if (t >= 0 && t <= 1) {
+             const point = fx.path.getPoint(progress);
+             fx.mesh.position.copy(point);
+             // Pulse scale
+             const s = 1.5 + Math.sin(progress * Math.PI * 8) * 0.5;
+             fx.mesh.scale.set(s, s, s);
+             fx.mesh.visible = true;
+         } else {
+             fx.mesh.visible = false;
+         }
       }
     }
   }
