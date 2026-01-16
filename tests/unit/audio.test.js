@@ -266,6 +266,7 @@ describe('AudioController', () => {
 
     it('should create gain for each oscillator', () => {
       const createGainSpy = vi.spyOn(audio.context, 'createGain');
+      createGainSpy.mockClear(); // Clear the initial call from init()
       const frequencies = [440, 554, 659];
       
       audio._createChord(frequencies, 0.4);

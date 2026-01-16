@@ -2,13 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WindowManager } from '../../src/windowManager.js';
 
 // Mock interact.js
-vi.mock('interactjs', () => ({
-  default: vi.fn(() => ({
-    draggable: vi.fn(() => ({
-      on: vi.fn()
-    }))
-  }))
-}));
+vi.mock('interactjs', () => {
+  const interact = vi.fn(() => ({
+    draggable: vi.fn(),
+    on: vi.fn()
+  }));
+
+  interact.modifiers = {
+    restrictRect: vi.fn(() => ({}))
+  };
+
+  return { default: interact };
+});
 
 describe('WindowManager', () => {
   let windowManager;
