@@ -732,6 +732,7 @@ export class TileRenderer {
         if (fx.mesh) {
             this.scene.remove(fx.mesh);
             if (fx.type === 'smoke') {
+                fx.mesh.visible = false;
                 this.smokePool.push(fx.mesh);
             } else {
                 if (fx.mesh.geometry) fx.mesh.geometry.dispose();
