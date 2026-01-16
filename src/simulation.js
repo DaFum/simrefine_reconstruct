@@ -3108,8 +3108,9 @@ export class RefinerySimulation {
           }
         } else {
           if (obj.timeRemaining < obj.duration) {
-             // Reset if dropped
+             this.pushLog("info", `Objective Reset: ${obj.label}`);
           }
+          obj.completed = false;
           obj.timeRemaining = obj.duration;
           allMet = false;
         }

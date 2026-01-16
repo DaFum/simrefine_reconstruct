@@ -1202,14 +1202,17 @@ export class UIController {
         label.textContent = obj.label;
         if (obj.completed) label.style.color = "var(--color-success, #4ade80)";
 
+        const target = Number(obj.target) || 0;
+        const duration = Number(obj.duration) || 0;
+
         const value = document.createElement("span");
         if (obj.type === "production" || obj.type === "delivery") {
-            value.textContent = `${Math.min(obj.progress || 0, obj.target).toFixed(0)} / ${obj.target}`;
+            value.textContent = `${Math.min(obj.progress || 0, target).toFixed(0)} / ${target}`;
         } else if (obj.type === "reliability") {
             if (obj.completed) {
                 value.textContent = "Done";
             } else {
-                value.textContent = `${obj.timeRemaining.toFixed(1)}h left`;
+                value.textContent = `${(obj.timeRemaining || 0).toFixed(1)}h left`;
             }
         }
 
@@ -1226,10 +1229,13 @@ export class UIController {
         if (obj.completed) {
             ratio = 1;
         } else if (obj.type === "production" || obj.type === "delivery") {
-            ratio = Math.min((obj.progress || 0) / obj.target, 1);
+            ratio = target > 0 ? Math.min((Number(obj.progress)||0)/target, 1) : 0;
         } else if (obj.type === "reliability") {
-            ratio = Math.max(0, 1 - (obj.timeRemaining / obj.duration));
+            ratio = duration > 0 ? Math.max(0, 1 - (Number(obj.timeRemaining)||0)/duration) : 0;
         }
+
+        if (!Number.isFinite(ratio)) ratio = 0;
+        ratio = Math.min(Math.max(ratio, 0), 1);
 
         fill.style.width = `${ratio * 100}%`;
         if (obj.completed) fill.style.backgroundColor = "var(--color-success, #4ade80)";

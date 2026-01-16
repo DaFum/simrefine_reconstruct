@@ -552,7 +552,10 @@ export class TileRenderer {
       const tempPos = new THREE.Vector3();
       const tempLook = new THREE.Vector3();
 
-      state.convoys.forEach(convoy => {
+      const convoys = state && Array.isArray(state.convoys) ? state.convoys : [];
+      const inspections = state && Array.isArray(state.inspections) ? state.inspections : [];
+
+      convoys.forEach(convoy => {
           // Calculate position based on progress
           const progress = clamp(convoy.elapsed / convoy.duration, 0, 1);
 
@@ -600,7 +603,7 @@ export class TileRenderer {
 
       // Update Drones
       let droneCount = 0;
-      state.inspections.forEach(insp => {
+      inspections.forEach(insp => {
           if (droneCount >= 20) return;
           const unit = this.unitMeshes.get(insp.unitId);
           if (!unit) return;
