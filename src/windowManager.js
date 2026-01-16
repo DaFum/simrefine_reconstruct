@@ -1,3 +1,5 @@
+import interact from 'interactjs';
+
 export class WindowManager {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
@@ -36,62 +38,61 @@ export class WindowManager {
     // Find existing windows
     const windowEls = this.container.querySelectorAll('.window');
     windowEls.forEach(el => {
-      this.makeDraggable(el);
-      // TODO: Implement window resizing (currently windows are draggable only and cannot be resized).
-      // this.makeResizable(el);
       this.windows.push(el);
+    });
+
+    // Initialize interact.js for draggable windows
+    interact('.window').draggable({
+      allowFrom: '.window-title',
+      inertia: true,
+      modifiers: [
+        interact.modifiers.restrictRect({
+          restriction: 'parent',
+          endOnly: true
+        })
+      ],
+      listeners: {
+        start: (event) => {
+          // Bring to front on start drag
+          this._bringToFront(event.target);
+        },
+        move: (event) => {
+          const target = event.target;
+          const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+          const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+
+          // translate the element
+          target.style.transform = `translate(${x}px, ${y}px)`;
+
+          // update the posiion attributes
+          target.setAttribute('data-x', x);
+          target.setAttribute('data-y', y);
+        }
+      }
+    });
+
+    // Add pointerdown listener to bring to front even when not dragging (just clicking)
+    this.windows.forEach(win => {
+        const header = win.querySelector('.window-title');
+        if (header) {
+            header.addEventListener('pointerdown', () => {
+                this._bringToFront(win);
+            });
+        }
     });
 
     // Create workspace switcher (simple UI for now)
     this._createWorkspaceSwitcher();
   }
 
-  makeDraggable(element) {
-    const header = element.querySelector('.window-title');
-    if (!header) return;
-
-    let isDragging = false;
-    let startX, startY, initialLeft, initialTop;
-
-    header.addEventListener('pointerdown', (e) => {
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-
-      const rect = element.getBoundingClientRect();
-      // If position is static (flex), we need to switch to absolute
-      const computedStyle = window.getComputedStyle(element);
-      if (computedStyle.position === 'static' || computedStyle.position === 'relative') {
-          // Snap to current position but absolute
-          const parentRect = this.container.getBoundingClientRect();
-          element.style.position = 'absolute';
-          element.style.left = (rect.left - parentRect.left) + 'px';
-          element.style.top = (rect.top - parentRect.top) + 'px';
-          element.style.width = rect.width + 'px';
-          element.style.height = rect.height + 'px';
-          element.style.flex = 'none';
+  _bringToFront(element) {
+    // Reset z-index of other windows
+    this.windows.forEach(win => {
+      if (win !== element) {
+        win.style.zIndex = '';
       }
-
-      initialLeft = parseFloat(element.style.left || 0);
-      initialTop = parseFloat(element.style.top || 0);
-
-      header.setPointerCapture(e.pointerId);
-      element.style.zIndex = 100; // Bring to front
     });
-
-    header.addEventListener('pointermove', (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      element.style.left = `${initialLeft + dx}px`;
-      element.style.top = `${initialTop + dy}px`;
-    });
-
-    header.addEventListener('pointerup', (e) => {
-      isDragging = false;
-      header.releasePointerCapture(e.pointerId);
-      element.style.zIndex = '';
-    });
+    element.style.zIndex = 100;
   }
 
   setWorkspace(name) {
@@ -114,6 +115,11 @@ export class WindowManager {
                   win.style.top = layout.y + 'px';
                   win.style.width = layout.w + 'px';
                   win.style.height = layout.h + 'px';
+
+                  // Reset drag offsets when switching workspace
+                  win.style.transform = 'translate(0px, 0px)';
+                  win.setAttribute('data-x', 0);
+                  win.setAttribute('data-y', 0);
               }
           } else {
               win.style.display = 'none';

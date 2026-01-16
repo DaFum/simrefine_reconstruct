@@ -138,6 +138,14 @@ export class UIController {
         this.flashStorageLevel(data.product);
     });
 
+    bus.on("BYPASS_DEPLOYED", ({ unitId }) => {
+        this.showHint(`Bypass deployed at unit ${unitId}`);
+    });
+
+    bus.on("MAINTENANCE_SCHEDULED", ({ unitId }) => {
+        this.showHint(`Maintenance scheduled for unit ${unitId}`);
+    });
+
     // We could add more listeners here for UI reactions to system events
   }
 
@@ -1291,11 +1299,11 @@ export class UIController {
     slider.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
       throttleValue.textContent = `${Math.round(value * 100)}%`;
-      // We don't dispatch real-time throttle updates to history/command log,
-      // but we do want live feedback. We'll set quietly directly or via a "preview" command.
-      // For now, let's keep direct set for quiet updates to avoid spamming the event bus,
-      // or implement a debounced command.
-      this.simulation.setUnitThrottle(unit.id, value, { quiet: true });
+      // Dispatch a quiet command for live feedback without logging.
+      this.commandSystem.dispatch({
+        type: "SET_THROTTLE",
+        payload: { unitId: unit.id, value, quiet: true }
+      });
     });
     slider.addEventListener("change", (event) => {
       const value = Number(event.target.value) / 100;

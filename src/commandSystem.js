@@ -7,7 +7,7 @@ export class CommandSystem {
       'INSPECT_UNIT': this._handleInspectUnit.bind(this),
       'DEPLOY_BYPASS': this._handleDeployBypass.bind(this),
       'SCHEDULE_MAINTENANCE': this._handleScheduleMaintenance.bind(this),
-      'DISPATCH_CONVOY': this._handleDispatchConvoy.bind(this),
+      'DISPATCH_CONVOY': () => this._handleDispatchConvoy(),
       'SET_PARAM': this._handleSetParam.bind(this),
       'SET_THROTTLE': this._handleSetThrottle.bind(this),
       'TOGGLE_UNIT_OFFLINE': this._handleToggleUnitOffline.bind(this),
@@ -53,7 +53,7 @@ export class CommandSystem {
     }
   }
 
-  _handleDispatchConvoy({}) {
+  _handleDispatchConvoy() {
     const result = this.simulation.dispatchLogisticsConvoy();
     if (result?.product) {
       this.eventBus.emit("CONVOY_DISPATCHED", { product: result.product });
@@ -65,9 +65,11 @@ export class CommandSystem {
       this.eventBus.emit("PARAM_UPDATED", { param, value });
   }
 
-  _handleSetThrottle({ unitId, value }) {
-      this.simulation.setUnitThrottle(unitId, value);
-      this.eventBus.emit("UNIT_THROTTLE_CHANGED", { unitId, value });
+  _handleSetThrottle({ unitId, value, quiet }) {
+      this.simulation.setUnitThrottle(unitId, value, { quiet });
+      if (!quiet) {
+        this.eventBus.emit("UNIT_THROTTLE_CHANGED", { unitId, value });
+      }
   }
 
   _handleToggleUnitOffline({ unitId, offline }) {
