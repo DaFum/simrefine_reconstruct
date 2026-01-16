@@ -35,6 +35,7 @@ export class AudioController {
   }
 
   destroy() {
+    // Explicitly remove listeners
     if (this._initHandler) {
       window.removeEventListener('click', this._initHandler);
       window.removeEventListener('keydown', this._initHandler);
@@ -43,6 +44,15 @@ export class AudioController {
       this.context.close();
       this.context = null;
     }
+    if (this.masterGain) {
+      try {
+        this.masterGain.disconnect();
+      } catch (e) {
+        // Ignore disconnect errors
+      }
+      this.masterGain = null;
+    }
+    this.sounds.clear();
     this.enabled = false;
   }
 

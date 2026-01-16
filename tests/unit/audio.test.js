@@ -3,16 +3,23 @@ import { AudioController } from '../../src/audio.js';
 
 describe('AudioController', () => {
   let audio;
+  const instances = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
     audio = new AudioController();
+    instances.push(audio);
   });
 
   afterEach(() => {
-    if (audio) {
-      audio.destroy();
-    }
+    instances.forEach(instance => {
+      try {
+        instance.destroy();
+      } catch (e) {
+        // Ignore destroy errors in tests
+      }
+    });
+    instances.length = 0;
   });
 
   describe('constructor', () => {
@@ -30,6 +37,7 @@ describe('AudioController', () => {
     it('should set up event listeners for user interaction', () => {
       const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
       const newAudio = new AudioController();
+      instances.push(newAudio);
       
       expect(addEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function));
       expect(addEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
@@ -39,6 +47,7 @@ describe('AudioController', () => {
   describe('initialization on user interaction', () => {
     it('should initialize AudioContext on click', () => {
       const newAudio = new AudioController();
+      instances.push(newAudio);
       window.dispatchEvent(new Event('click'));
 
       expect(newAudio.context).toBeDefined();
@@ -48,6 +57,7 @@ describe('AudioController', () => {
 
     it('should initialize AudioContext on keydown', () => {
       const newAudio = new AudioController();
+      instances.push(newAudio);
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
 
       expect(newAudio.context).toBeDefined();
@@ -56,6 +66,7 @@ describe('AudioController', () => {
 
     it('should set master gain volume to 0.3', () => {
       const newAudio = new AudioController();
+      instances.push(newAudio);
       window.dispatchEvent(new Event('click'));
 
       expect(newAudio.masterGain.gain.value).toBe(0.3);
@@ -63,6 +74,7 @@ describe('AudioController', () => {
 
     it('should generate sounds after initialization', () => {
       const newAudio = new AudioController();
+      instances.push(newAudio);
       window.dispatchEvent(new Event('click'));
 
       expect(newAudio.sounds.size).toBeGreaterThan(0);
@@ -71,6 +83,7 @@ describe('AudioController', () => {
     it('should remove event listeners after first initialization', () => {
       const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
       const newAudio = new AudioController();
+      instances.push(newAudio);
       
       window.dispatchEvent(new Event('click'));
 
@@ -105,6 +118,7 @@ describe('AudioController', () => {
   describe('play', () => {
     it('should not play if audio is not enabled', () => {
       const newAudio = new AudioController();
+      instances.push(newAudio);
       expect(() => newAudio.play('click')).not.toThrow();
     });
 
