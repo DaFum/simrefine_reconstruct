@@ -26,7 +26,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Roboto", sans-serif;
+  font-family: var(--font-sans);
   background: var(--desktop-bg);
   /* Subtle noise texture */
   background-image: var(--desktop-bg), repeating-linear-gradient(45deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 1px, transparent 1px, transparent 2px);
