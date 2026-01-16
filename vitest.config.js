@@ -18,7 +18,8 @@ export default defineConfig({
         '**/*.config.js'
       ]
     },
-    include: ['tests/**/*.test.js', 'tests/**/*.spec.js']
+    include: ['tests/**/*.test.js', 'tests/**/*.spec.js'],
+    maxWorkers: 1
   },
   resolve: {
     alias: {

@@ -2,7 +2,7 @@ SimRefinery Reconstruct - Test Suite Manifest
 ==============================================
 
 CREATED: January 16, 2026
-FRAMEWORK: Vitest v1.0.4
+FRAMEWORK: Vitest v4.0.17
 TOTAL TESTS: 228+
 TOTAL FILES: 12
 
