@@ -692,22 +692,35 @@ export class UIController {
 
   _renderLogs() {
     const logs = this.simulation.getLogs();
-    const signature = logs.length ? `${logs[0].timestamp}-${logs[0].message}` : "";
+    const latest = logs.length ? logs[0] : null;
+    const signature = latest ? JSON.stringify({ t: latest.timestamp, m: latest.message }) : "";
+
     if (signature === this.lastLogSignature) {
       return;
     }
 
     // Check if new log is warning/danger and play sound
-    if (logs.length > 0) {
-        const latest = logs[0];
-        const lastSigParts = this.lastLogSignature.split('-');
-        // Basic check if it's actually new
-        if (latest.timestamp !== lastSigParts[0] || latest.message !== lastSigParts.slice(1).join('-')) {
+    if (latest && this.lastLogSignature) {
+        let last = null;
+        try {
+            last = JSON.parse(this.lastLogSignature);
+        } catch (e) {
+            // Fallback for old string format or empty
+        }
+
+        if (!last || last.t !== latest.timestamp || last.m !== latest.message) {
             if (latest.level === 'danger') {
                 this.audio?.play('error');
             } else if (latest.level === 'warning') {
                 this.audio?.play('warning');
             }
+        }
+    } else if (latest) {
+        // First log
+        if (latest.level === 'danger') {
+            this.audio?.play('error');
+        } else if (latest.level === 'warning') {
+            this.audio?.play('warning');
         }
     }
 

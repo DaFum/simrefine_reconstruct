@@ -82,9 +82,20 @@ export class ThemeManager {
 
     this.eventBus.on("ALERT_RAISED", (alert) => {
         if (alert.severity === "danger") {
-            if (alert.id) {
-                this.activeDangerAlerts.add(alert.id);
+            let id = alert.id;
+            if (!id) {
+                // Generate a temporary ID for tracking if none provided
+                id = `temp-danger-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+                // Mutate the alert object so cleared event can use same ID if passed back reference?
+                // Or we need to store it somewhere.
+                // Assuming ALERT_CLEARED will have same object reference or id.
+                // If the system emits ALERT_CLEARED with the same ID, we are good.
+                // If it emits with NO ID, we can't track it.
+                // The simulation now emits IDs.
+                // However, user prompt says "track danger alerts that lack an id... assign generated unique token... ensure generated token is attached or returned"
+                alert.id = id;
             }
+            this.activeDangerAlerts.add(id);
             this.setTheme("emergency");
         }
     });
