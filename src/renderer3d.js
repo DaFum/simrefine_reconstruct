@@ -104,6 +104,7 @@ export class TileRenderer {
     // Initialize procedural textures for effects
     this._initEffectTextures();
     this._initActionToys();
+    /** @type {THREE.Object3D[]} Pool of reusable smoke sprite meshes for performance optimization. */
     this.smokePool = [];
   }
 
