@@ -1332,6 +1332,7 @@ export class UIController {
     const toggleButton = document.createElement("button");
     toggleButton.type = "button";
     toggleButton.classList.add("unit-control-button");
+    toggleButton.setAttribute("aria-pressed", offlineActive ? "true" : "false");
     toggleButton.textContent = offlineActive
       ? unit.emergencyOffline
         ? "Release Hold"

@@ -1,31 +1,33 @@
 :root {
-  color-scheme: only light;
+  color-scheme: dark;
 
   /* Layout */
-  --desktop-bg: radial-gradient(circle at 20% 20%, #1c2a3a 0%, #0a101a 65%);
-  --header-grad-top: #466a9f;
-  --header-grad-bottom: #244165;
-  --header-text: #f5f9ff;
-  --toolbar-bg: linear-gradient(#c8c8c8, #b4b4b4);
-  --toolbar-border: #5a5a5a;
+  --desktop-bg: radial-gradient(circle at 50% 50%, #1a1c23 0%, #050608 100%);
+  --header-grad-top: #252830;
+  --header-grad-bottom: #16181d;
+  --header-text: #ff9e42; /* Amber terminal */
+  --toolbar-bg: #111216;
+  --toolbar-border: #3e4149;
 
   /* Window */
-  --window-bg-light: #d7d7d7;
-  --window-bg-dark: #b6b6b6;
-  --window-border-light: #f5f5f5;
-  --window-border-dark: #707070;
+  --window-bg-light: #1e2128;
+  --window-bg-dark: #121418;
+  --window-border-light: #484c57;
+  --window-border-dark: #000000;
+  --glass-overlay: rgba(255, 255, 255, 0.03);
 
   /* Metrics & Logs */
-  --accent-blue: #1f4b7a;
-  --metric-bg: #f1f1f1;
-  --metric-border: #6b6b6b;
-  --log-info: #2d4f73;
-  --log-warning: #9f6d19;
-  --log-danger: #8a1e1e;
+  --accent-blue: #00e5ff; /* Cyan */
+  --accent-orange: #ff9e42;
+  --metric-bg: #08090b;
+  --metric-border: #2c313a;
+  --log-info: #5ccfe6;
+  --log-warning: #ffd33d;
+  --log-danger: #ff5555;
 
   /* Typography */
-  --font-mono: "Inconsolata", monospace;
-  --font-sans: "Roboto", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --font-sans: "Chakra Petch", sans-serif;
 }
 
 /* Theme: Twilight (Default)
