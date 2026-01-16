@@ -138,12 +138,16 @@ export class UIController {
         this.flashStorageLevel(data.product);
     });
 
-    bus.on("BYPASS_DEPLOYED", ({ unitId }) => {
-        this.showHint(`Bypass deployed at unit ${unitId}`);
+    bus.on("BYPASS_DEPLOYED", (payload) => {
+        if (payload?.unitId) {
+            this.showHint(`Bypass deployed at unit ${payload.unitId}`);
+        }
     });
 
-    bus.on("MAINTENANCE_SCHEDULED", ({ unitId }) => {
-        this.showHint(`Maintenance scheduled for unit ${unitId}`);
+    bus.on("MAINTENANCE_SCHEDULED", (payload) => {
+        if (payload?.unitId) {
+            this.showHint(`Maintenance scheduled for unit ${payload.unitId}`);
+        }
     });
 
     // We could add more listeners here for UI reactions to system events
@@ -1189,7 +1193,8 @@ export class UIController {
     objectivesList.style.paddingLeft = "0";
     objectivesList.style.listStyle = "none";
 
-    mission.objectives.forEach(obj => {
+    if (Array.isArray(mission.objectives)) {
+      mission.objectives.forEach(obj => {
         const objItem = document.createElement("li");
         objItem.style.marginBottom = "0.5rem";
 
@@ -1243,7 +1248,8 @@ export class UIController {
         progress.appendChild(fill);
         objItem.appendChild(progress);
         objectivesList.appendChild(objItem);
-    });
+      });
+    }
 
     item.appendChild(objectivesList);
     list.appendChild(item);
