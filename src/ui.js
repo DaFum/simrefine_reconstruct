@@ -5,8 +5,10 @@ const PRODUCT_LABELS = {
 };
 
 export class UIController {
-  constructor(simulation) {
+  constructor(simulation, audio, commandSystem) {
     this.simulation = simulation;
+    this.audio = audio;
+    this.commandSystem = commandSystem;
     this.selectedUnitId = null;
     this.lastLogSignature = "";
     this.modeFlashTimeout = null;
@@ -75,7 +77,7 @@ export class UIController {
       mapLogisticsJet: document.getElementById("map-logistics-jet"),
       shipmentList: document.getElementById("shipment-list"),
       shipmentReliability: document.getElementById("shipment-reliability"),
-      directiveList: document.getElementById("directive-list"),
+      missionPanel: document.getElementById("directive-list"), // Renaming to missionPanel internally, keeping DOM id for now
       speedControls: document.getElementById("speed-controls"),
       speedReadout: document.getElementById("speed-readout"),
       logisticsExpedite: document.getElementById("logistics-expedite"),
@@ -114,6 +116,63 @@ export class UIController {
     this.lastRecorderSignature = "";
     this.inspectionReports = new Map();
     this.storageFlashTimers = new Map();
+    this.previousMetrics = {};
+    this.activeAnimations = new Map();
+    this._injectHintLayer();
+    this._bindEvents();
+  }
+
+  _bindEvents() {
+    if (!this.commandSystem || !this.commandSystem.eventBus) return;
+    const bus = this.commandSystem.eventBus;
+
+    bus.on("INSPECTION_COMPLETED", (data) => {
+        this.recordInspectionReport(data.report);
+        this.audio?.play('success');
+    });
+
+    bus.on("CONVOY_DISPATCHED", (data) => {
+        if (!data || !data.product) {
+          return;
+        }
+        this.flashStorageLevel(data.product);
+    });
+
+    bus.on("BYPASS_DEPLOYED", ({ unitId }) => {
+        this.showHint(`Bypass deployed at unit ${unitId}`);
+    });
+
+    bus.on("MAINTENANCE_SCHEDULED", ({ unitId }) => {
+        this.showHint(`Maintenance scheduled for unit ${unitId}`);
+    });
+
+    // We could add more listeners here for UI reactions to system events
+  }
+
+  _injectHintLayer() {
+    const hintLayer = document.createElement("div");
+    hintLayer.id = "ui-hint-layer";
+    hintLayer.className = "ui-hint-layer";
+    hintLayer.setAttribute("aria-live", "polite");
+    document.body.appendChild(hintLayer);
+    this.elements.hintLayer = hintLayer;
+
+    // Initial hint
+    this.showHint("Welcome. Try: Click a unit → Inspect → Deploy PIPE");
+  }
+
+  showHint(message) {
+    if (!this.elements.hintLayer) return;
+    this.elements.hintLayer.textContent = message;
+    this.elements.hintLayer.classList.remove("visible");
+    // Trigger reflow
+    void this.elements.hintLayer.offsetWidth;
+    this.elements.hintLayer.classList.add("visible");
+
+    if (this.hintTimeout) clearTimeout(this.hintTimeout);
+    this.hintTimeout = setTimeout(() => {
+        this.elements.hintLayer.classList.remove("visible");
+    }, 5000);
   }
 
   _bindControls() {
@@ -121,44 +180,52 @@ export class UIController {
 
     elements.crude.addEventListener("input", (event) => {
       const value = Number(event.target.value);
-      simulation.setParam("crudeIntake", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "crudeIntake", value } });
       elements.crudeValue.textContent = `${value.toFixed(0)} kbpd`;
     });
 
     elements.focus.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
-      simulation.setParam("productFocus", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "productFocus", value } });
       elements.focusValue.textContent = value > 0.5 ? "Gasoline" : value < 0.5 ? "Diesel" : "Balanced";
     });
 
     elements.maintenance.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
-      simulation.setParam("maintenance", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "maintenance", value } });
       elements.maintenanceValue.textContent = `${Math.round(value * 100)}%`;
     });
 
     elements.safety.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
-      simulation.setParam("safety", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "safety", value } });
       elements.safetyValue.textContent = `${Math.round(value * 100)}%`;
     });
 
     elements.environment.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
-      simulation.setParam("environment", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "environment", value } });
       elements.environmentValue.textContent = `${Math.round(value * 100)}%`;
     });
 
+    // Add sound on mouseup/keyup for sliders to not spam
+    [elements.crude, elements.focus, elements.maintenance, elements.safety, elements.environment].forEach(el => {
+        el.addEventListener('change', () => this.audio?.play('hover')); // using hover as a soft click
+    });
+
     elements.toggle.addEventListener("click", () => {
+      // Audio handled in main.js for toggle
       const running = simulation.toggleRunning();
       elements.toggle.textContent = running ? "Pause" : "Resume";
     });
 
     elements.step.addEventListener("click", () => {
+      this.audio?.play('click');
       simulation.requestStep();
     });
 
     elements.reset.addEventListener("click", () => {
+      this.audio?.play('click');
       simulation.reset();
       this.selectedUnitId = null;
       this._renderUnitDetails(null);
@@ -166,12 +233,13 @@ export class UIController {
     });
 
     elements.scenario.addEventListener("change", (event) => {
-      simulation.applyScenario(event.target.value);
+      this.commandSystem.dispatch({ type: "APPLY_SCENARIO", payload: { scenario: event.target.value } });
       this._updateScenarioDescription();
     });
 
     if (elements.logisticsExpedite && typeof simulation.requestExtraShipment === "function") {
       elements.logisticsExpedite.addEventListener("click", () => {
+        this.audio?.play('click');
         const result = simulation.requestExtraShipment();
         if (result && result.product) {
           this.flashStorageLevel(result.product);
@@ -182,6 +250,7 @@ export class UIController {
 
     if (elements.logisticsDelay && typeof simulation.delayNextShipment === "function") {
       elements.logisticsDelay.addEventListener("click", () => {
+        this.audio?.play('click');
         const delayed = simulation.delayNextShipment();
         if (delayed && delayed.product) {
           this.flashStorageLevel(delayed.product);
@@ -192,6 +261,7 @@ export class UIController {
 
     if (elements.logisticsExpand && typeof simulation.expandStorageCapacity === "function") {
       elements.logisticsExpand.addEventListener("click", () => {
+        this.audio?.play('click');
         const outcome = simulation.expandStorageCapacity();
         if (outcome && outcome.level) {
           this.update(simulation.getLogisticsState(), null);
@@ -280,6 +350,7 @@ export class UIController {
     if (!product) {
       return;
     }
+    this.audio?.play('alert');
     const key = product.charAt(0).toUpperCase() + product.slice(1);
     const bar = this.elements[`inventory${key}Bar`];
     if (!bar) {
@@ -359,6 +430,9 @@ export class UIController {
     if (typeof this.simulation.getRecorderState === "function") {
       this._renderRecorderState(this.simulation.getRecorderState());
     }
+
+    // Removed direct polling of getCompletedInspections as it is now handled by event listener
+
     this._renderLogs();
     this._updateClock();
     if (this.selectedUnitId) {
@@ -369,7 +443,7 @@ export class UIController {
     }
     const logistics = logisticsState || this.simulation.getLogisticsState();
     this._renderLogistics(logistics);
-    this._renderDirectives(this.simulation.getDirectives());
+    this._renderMission(this.simulation.getMissionState());
   }
 
   refreshControls() {
@@ -407,36 +481,30 @@ export class UIController {
 
   _renderMetrics(metrics) {
     const formatBpd = (value) => `${value.toFixed(1)} kbpd`;
-    this.elements.gasolineOutput.textContent = formatBpd(metrics.gasoline);
-    this.elements.dieselOutput.textContent = formatBpd(metrics.diesel);
-    this.elements.jetOutput.textContent = formatBpd(metrics.jet);
-    this.elements.lpgOutput.textContent = formatBpd(metrics.lpg);
 
-    this.elements.profitOutput.textContent = `${this.profitFormatter.format(
-      Math.round(metrics.profitPerHour * 1000)
-    )} / hr`;
+    // Animate throughputs
+    this._animateMetric(this.elements.gasolineOutput, 'gasoline', metrics.gasoline, formatBpd);
+    this._animateMetric(this.elements.dieselOutput, 'diesel', metrics.diesel, formatBpd);
+    this._animateMetric(this.elements.jetOutput, 'jet', metrics.jet, formatBpd);
+    this._animateMetric(this.elements.lpgOutput, 'lpg', metrics.lpg, formatBpd);
+
+    // Animate Financials
+    const profitVal = Math.round(metrics.profitPerHour * 1000);
+    this._animateMetric(this.elements.profitOutput, 'profit', profitVal, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
 
     if (this.elements.revenueOutput) {
-      const revenue = typeof metrics.revenuePerDay === "number" ? metrics.revenuePerDay : 0;
-      this.elements.revenueOutput.textContent = `${this.profitFormatter.format(
-        Math.round(revenue * 1000)
-      )} / day`;
+      const revenue = typeof metrics.revenuePerDay === "number" ? Math.round(metrics.revenuePerDay * 1000) : 0;
+      this._animateMetric(this.elements.revenueOutput, 'revenue', revenue, (val) => `${this.profitFormatter.format(Math.round(val))} / day`);
     }
 
     if (this.elements.expenseOutput) {
-      const expensePerHour =
-        typeof metrics.expensePerDay === "number" ? metrics.expensePerDay / 24 : 0;
-      this.elements.expenseOutput.textContent = `${this.profitFormatter.format(
-        Math.round(expensePerHour * 1000)
-      )} / hr`;
+      const expensePerHour = typeof metrics.expensePerDay === "number" ? Math.round((metrics.expensePerDay / 24) * 1000) : 0;
+      this._animateMetric(this.elements.expenseOutput, 'expense', expensePerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
     }
 
     if (this.elements.penaltyOutput) {
-      const penaltyPerHour =
-        typeof metrics.penaltyPerDay === "number" ? metrics.penaltyPerDay / 24 : 0;
-      this.elements.penaltyOutput.textContent = `${this.profitFormatter.format(
-        Math.round(penaltyPerHour * 1000)
-      )} / hr`;
+      const penaltyPerHour = typeof metrics.penaltyPerDay === "number" ? Math.round((metrics.penaltyPerDay / 24) * 1000) : 0;
+      this._animateMetric(this.elements.penaltyOutput, 'penalty', penaltyPerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
     }
 
     if (this.elements.marginOutput) {
@@ -624,10 +692,38 @@ export class UIController {
 
   _renderLogs() {
     const logs = this.simulation.getLogs();
-    const signature = logs.length ? `${logs[0].timestamp}-${logs[0].message}` : "";
+    const latest = logs.length ? logs[0] : null;
+    const signature = latest ? JSON.stringify({ t: latest.timestamp, m: latest.message }) : "";
+
     if (signature === this.lastLogSignature) {
       return;
     }
+
+    // Check if new log is warning/danger and play sound
+    if (latest && this.lastLogSignature) {
+        let last = null;
+        try {
+            last = JSON.parse(this.lastLogSignature);
+        } catch (e) {
+            // Fallback for old string format or empty
+        }
+
+        if (!last || last.t !== latest.timestamp || last.m !== latest.message) {
+            if (latest.level === 'danger') {
+                this.audio?.play('error');
+            } else if (latest.level === 'warning') {
+                this.audio?.play('warning');
+            }
+        }
+    } else if (latest) {
+        // First log
+        if (latest.level === 'danger') {
+            this.audio?.play('error');
+        } else if (latest.level === 'warning') {
+            this.audio?.play('warning');
+        }
+    }
+
     this.lastLogSignature = signature;
 
     this.elements.logList.innerHTML = "";
@@ -1042,92 +1138,115 @@ export class UIController {
     return item;
   }
 
-  _renderDirectives(directives) {
-    const list = this.elements.directiveList;
+  _renderMission(missionState) {
+    const list = this.elements.missionPanel;
     if (!list) {
       return;
     }
     list.innerHTML = "";
-    const entries = Array.isArray(directives) ? [...directives] : [];
-    const statusOrder = { active: 0, completed: 1, failed: 2 };
 
-    entries
-      .sort((a, b) => {
-        const aStatus = statusOrder[a.status] ?? 3;
-        const bStatus = statusOrder[b.status] ?? 3;
-        if (aStatus !== bStatus) {
-          return aStatus - bStatus;
-        }
-        return (a.timeRemaining ?? 0) - (b.timeRemaining ?? 0);
-      })
-      .forEach((directive) => {
-        list.appendChild(this._renderDirectiveItem(directive));
-      });
-
-    if (!entries.length) {
+    const mission = missionState?.active;
+    if (!mission) {
       const empty = document.createElement("li");
       empty.classList.add("directive", "empty");
-      empty.textContent = "No directives issued.";
+      empty.textContent = "No active mission.";
       list.appendChild(empty);
+      return;
     }
-  }
 
-  _renderDirectiveItem(directive) {
+    // Play sound if recently completed
+    if (mission.completed && !this.lastMissionCompletePlayed) {
+        this.audio?.play('success'); // Assuming 'success' or use 'click'
+        this.lastMissionCompletePlayed = true;
+    } else if (!mission.completed) {
+        this.lastMissionCompletePlayed = false;
+    }
+
     const item = document.createElement("li");
-    const status = directive.status || "active";
-    item.classList.add("directive", status);
+    item.classList.add("directive", mission.completed ? "completed" : "active");
 
     const header = document.createElement("div");
     header.classList.add("directive-header");
     const title = document.createElement("span");
     title.classList.add("directive-title");
-    title.textContent = directive.title;
+    title.textContent = mission.title;
     header.appendChild(title);
 
     const statusLabel = document.createElement("span");
     statusLabel.classList.add("directive-status");
-    if (status === "active") {
-      statusLabel.textContent = directive.timeRemaining > 0
-        ? `${this._formatHours(directive.timeRemaining)} left`
-        : "Due now";
-    } else if (status === "completed") {
-      statusLabel.textContent = "Completed";
-    } else {
-      statusLabel.textContent = "Failed";
-    }
+    statusLabel.textContent = mission.completed ? "COMPLETE" : "ACTIVE";
     header.appendChild(statusLabel);
     item.appendChild(header);
 
-    if (directive.description) {
-      const description = document.createElement("p");
-      description.textContent = directive.description;
-      item.appendChild(description);
-    }
+    const description = document.createElement("p");
+    description.textContent = mission.description;
+    item.appendChild(description);
 
-    const meta = document.createElement("div");
-    meta.classList.add("directive-meta");
-    if (directive.type === "delivery") {
-      const progress = directive.progress || 0;
-      meta.textContent = `${Math.min(progress, directive.target).toFixed(0)} / ${directive.target.toFixed(
-        0
-      )} kb staged`;
-    } else if (directive.type === "reliability") {
-      meta.textContent = `Maintain ≥ ${Math.round((directive.threshold || 0) * 100)}%`;
-    } else if (directive.type === "carbon") {
-      meta.textContent = `Cap at ${directive.threshold} tCO₂-eq`;
-    }
-    item.appendChild(meta);
+    // Objectives
+    const objectivesList = document.createElement("ul");
+    objectivesList.className = "mission-objectives";
+    objectivesList.style.marginTop = "0.5rem";
+    objectivesList.style.paddingLeft = "0";
+    objectivesList.style.listStyle = "none";
 
-    const progressBar = document.createElement("div");
-    progressBar.classList.add("directive-progress");
-    const fill = document.createElement("div");
-    fill.classList.add("fill");
-    const ratio = Math.min(Math.max(directive.progressRatio ?? 0, 0), 1);
-    fill.style.width = `${Math.round(ratio * 100)}%`;
-    progressBar.appendChild(fill);
-    item.appendChild(progressBar);
+    mission.objectives.forEach(obj => {
+        const objItem = document.createElement("li");
+        objItem.style.marginBottom = "0.5rem";
 
-    return item;
+        const labelRow = document.createElement("div");
+        labelRow.style.display = "flex";
+        labelRow.style.justifyContent = "space-between";
+        labelRow.style.fontSize = "0.85rem";
+
+        const label = document.createElement("span");
+        label.textContent = obj.label;
+        if (obj.completed) label.style.color = "var(--color-success, #4ade80)";
+
+        const target = Number(obj.target) || 0;
+        const duration = Number(obj.duration) || 0;
+
+        const value = document.createElement("span");
+        if (obj.type === "production" || obj.type === "delivery") {
+            value.textContent = `${Math.min(obj.progress || 0, target).toFixed(0)} / ${target}`;
+        } else if (obj.type === "reliability") {
+            if (obj.completed) {
+                value.textContent = "Done";
+            } else {
+                value.textContent = `${(obj.timeRemaining || 0).toFixed(1)}h left`;
+            }
+        }
+
+        labelRow.appendChild(label);
+        labelRow.appendChild(value);
+        objItem.appendChild(labelRow);
+
+        const progress = document.createElement("div");
+        progress.className = "directive-progress";
+        const fill = document.createElement("div");
+        fill.className = "fill";
+
+        let ratio = 0;
+        if (obj.completed) {
+            ratio = 1;
+        } else if (obj.type === "production" || obj.type === "delivery") {
+            ratio = target > 0 ? Math.min((Number(obj.progress)||0)/target, 1) : 0;
+        } else if (obj.type === "reliability") {
+            ratio = duration > 0 ? Math.max(0, 1 - (Number(obj.timeRemaining)||0)/duration) : 0;
+        }
+
+        if (!Number.isFinite(ratio)) ratio = 0;
+        ratio = Math.min(Math.max(ratio, 0), 1);
+
+        fill.style.width = `${ratio * 100}%`;
+        if (obj.completed) fill.style.backgroundColor = "var(--color-success, #4ade80)";
+
+        progress.appendChild(fill);
+        objItem.appendChild(progress);
+        objectivesList.appendChild(objItem);
+    });
+
+    item.appendChild(objectivesList);
+    list.appendChild(item);
   }
 
   _formatFlow(value) {
@@ -1199,11 +1318,15 @@ export class UIController {
     slider.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
       throttleValue.textContent = `${Math.round(value * 100)}%`;
-      this.simulation.setUnitThrottle(unit.id, value, { quiet: true });
+      // Dispatch a quiet command for live feedback without logging.
+      this.commandSystem.dispatch({
+        type: "SET_THROTTLE",
+        payload: { unitId: unit.id, value, quiet: true }
+      });
     });
     slider.addEventListener("change", (event) => {
       const value = Number(event.target.value) / 100;
-      this.simulation.setUnitThrottle(unit.id, value);
+      this.commandSystem.dispatch({ type: "SET_THROTTLE", payload: { unitId: unit.id, value } });
       this.selectUnit(unit.id);
     });
     throttleWrapper.append(label, slider);
@@ -1215,13 +1338,14 @@ export class UIController {
     const toggleButton = document.createElement("button");
     toggleButton.type = "button";
     toggleButton.classList.add("unit-control-button");
+    toggleButton.setAttribute("aria-pressed", offlineActive ? "true" : "false");
     toggleButton.textContent = offlineActive
       ? unit.emergencyOffline
         ? "Release Hold"
         : "Bring Unit Online"
       : "Take Unit Offline";
     toggleButton.addEventListener("click", () => {
-      this.simulation.setUnitOffline(unit.id, !offlineActive);
+      this.commandSystem.dispatch({ type: "TOGGLE_UNIT_OFFLINE", payload: { unitId: unit.id, offline: !offlineActive } });
       this.selectUnit(unit.id);
     });
     buttonRow.appendChild(toggleButton);
@@ -1233,7 +1357,7 @@ export class UIController {
     clearButton.textContent = "Clear Overrides";
     clearButton.disabled = !hasOverride;
     clearButton.addEventListener("click", () => {
-      this.simulation.clearUnitOverride(unit.id);
+      this.commandSystem.dispatch({ type: "CLEAR_OVERRIDE", payload: { unitId: unit.id } });
       this.selectUnit(unit.id);
     });
     buttonRow.appendChild(clearButton);
@@ -1458,5 +1582,43 @@ export class UIController {
     const hour12 = ((hours + 11) % 12) + 1;
     const ampm = hours >= 12 ? "PM" : "AM";
     this.elements.clock.textContent = `${month} ${day}, ${year} ${String(hour12).padStart(2, "0")}:${minutes} ${ampm}`;
+  }
+
+  _animateMetric(element, key, targetValue, formatter) {
+    if (!element) return;
+
+    const previous = this.previousMetrics[key] ?? targetValue;
+    if (Math.abs(previous - targetValue) < 0.1) {
+        element.textContent = formatter(targetValue);
+        this.previousMetrics[key] = targetValue;
+        return;
+    }
+
+    // Cancel existing animation for this key
+    if (this.activeAnimations.has(key)) {
+        cancelAnimationFrame(this.activeAnimations.get(key));
+    }
+
+    const startValue = previous;
+    const startTime = performance.now();
+    const duration = 400; // ms
+
+    const animate = (now) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3); // cubic ease out
+
+        const current = startValue + (targetValue - startValue) * ease;
+        element.textContent = formatter(current);
+
+        if (progress < 1) {
+            this.activeAnimations.set(key, requestAnimationFrame(animate));
+        } else {
+            this.activeAnimations.delete(key);
+            this.previousMetrics[key] = targetValue;
+        }
+    };
+
+    this.activeAnimations.set(key, requestAnimationFrame(animate));
   }
 }

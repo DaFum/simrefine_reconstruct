@@ -4,11 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SimRefinery Desk - Tile prototype</title>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/layout.css" />
+    <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="hint.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;700&family=Roboto:wght@300;400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -402,7 +406,7 @@
               </section>
 
               <section id="directives-panel" class="panel directives" aria-live="polite">
-                <h2>Shift Directives</h2>
+                <h2>Mission Control</h2>
                 <ul id="directive-list" class="directive-list"></ul>
               </section>
 
@@ -425,6 +429,13 @@
       </div>
     </div>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "interactjs": "./vendor/interact-module.js"
+        }
+      }
+    </script>
     <script type="module" src="./src/main.js?v=6"></script>
   </body>
 </html>

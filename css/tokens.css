@@ -1,0 +1,64 @@
+:root {
+  color-scheme: dark;
+
+  /* Layout */
+  --desktop-bg: radial-gradient(circle at 50% 50%, #1a1c23 0%, #050608 100%);
+  --header-grad-top: #252830;
+  --header-grad-bottom: #16181d;
+  --header-text: #ff9e42; /* Amber terminal */
+  --toolbar-bg: #111216;
+  --toolbar-border: #3e4149;
+
+  /* Window */
+  --window-bg-light: #1e2128;
+  --window-bg-dark: #121418;
+  --window-border-light: #484c57;
+  --window-border-dark: #000000;
+  --glass-overlay: rgba(255, 255, 255, 0.03);
+
+  /* Metrics & Logs */
+  --accent-blue: #00e5ff; /* Cyan */
+  --accent-orange: #ff9e42;
+  --metric-bg: #08090b;
+  --metric-border: #2c313a;
+  --log-info: #5ccfe6;
+  --log-warning: #ffd33d;
+  --log-danger: #ff5555;
+
+  /* Typography */
+  --font-mono: "IBM Plex Mono", monospace;
+  --font-sans: "Chakra Petch", sans-serif;
+}
+
+/* Theme: Twilight (Default)
+ * Uses :root values for default styling.
+ */
+/*
+[data-theme="twilight"] {
+  --desktop-bg: radial-gradient(circle at 20% 20%, #1c2a3a 0%, #0a101a 65%);
+  --header-grad-top: #466a9f;
+  --header-grad-bottom: #244165;
+}
+*/
+
+/* Theme: Daybreak */
+[data-theme="daybreak"] {
+  --desktop-bg: radial-gradient(circle at 20% 20%, #3a506b 0%, #1c2a3a 65%);
+  --header-grad-top: #5b84c4;
+  --header-grad-bottom: #365885;
+}
+
+/* Theme: Emergency Red */
+[data-theme="emergency"] {
+  --desktop-bg: radial-gradient(circle at 20% 20%, #4a1c1c 0%, #1a0a0a 65%);
+  --header-grad-top: #9f4646;
+  --header-grad-bottom: #652424;
+  --window-border-light: #ffb6b6;
+}
+
+/* Theme: Training Mode */
+[data-theme="training"] {
+  --desktop-bg: radial-gradient(circle at 20% 20%, #2a3a1c 0%, #0a1a0a 65%);
+  --header-grad-top: #6a9f46;
+  --header-grad-bottom: #416524;
+}

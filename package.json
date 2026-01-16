@@ -1,0 +1,17 @@
+{
+  "name": "simrefine-reconstruct-tests",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.17",
+    "@vitest/ui": "^4.0.17",
+    "@vitest/coverage-v8": "^4.0.17",
+    "jsdom": "^27.4.0",
+    "happy-dom": "^20.3.1"
+  }
+}

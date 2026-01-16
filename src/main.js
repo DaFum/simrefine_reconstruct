@@ -1,6 +1,11 @@
 import { RefinerySimulation } from "./simulation.js?v=3";
 import { UIController } from "./ui.js?v=3";
 import { TileRenderer } from "./renderer3d.js?v=3";
+import { AudioController } from "./audio.js";
+import { EventBus } from "./eventBus.js";
+import { CommandSystem } from "./commandSystem.js";
+import { ThemeManager } from "./themeManager.js";
+import { WindowManager } from "./windowManager.js";
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const HOURS_PER_DAY = 24;
@@ -34,11 +39,17 @@ const mapStatusPanel = document.querySelector(".map-status");
 
 sceneContainer.innerHTML = "";
 
-const simulation = new RefinerySimulation();
-const ui = new UIController(simulation);
+const eventBus = new EventBus();
+const audio = new AudioController();
+const simulation = new RefinerySimulation(eventBus);
+const commandSystem = new CommandSystem(simulation, eventBus);
+const ui = new UIController(simulation, audio, commandSystem);
+// Renderer is created later, so we initialize ThemeManager after renderer creation
 if (typeof ui.setModeBadge === "function") {
   ui.setModeBadge("AUTO");
 }
+
+const windowManager = new WindowManager("desktop");
 
 const processTopology = simulation.getProcessTopology?.() || {};
 const unitConnectionIndex = buildUnitConnectionIndex(processTopology);
@@ -186,7 +197,11 @@ const pipelineConfigs = [
 
 
 const renderer = new TileRenderer(sceneContainer, simulation, unitConfigs, pipelineConfigs);
+new ThemeManager(renderer, eventBus);
 const surface = renderer.getSurface();
+
+// Expose for debugging after all systems are initialized
+window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem };
 
 const unitPulseEntries = new Map();
 const unitModeLabels = new Map();
@@ -229,6 +244,33 @@ const PRESETS = {
   },
 };
 
+// --- Event Listeners for Visual Feedback ---
+eventBus.on("INSPECTION_STARTED", ({ unitId }) => {
+    if (unitId && typeof renderer.focusOnUnit === "function") {
+        renderer.focusOnUnit(unitId, { onlyIfVisible: true });
+        highlightPipelinesForUnit(unitId);
+    }
+});
+
+eventBus.on("BYPASS_DEPLOYED", ({ unitId }) => {
+    if (unitId) {
+        highlightPipelinesForUnit(unitId);
+        renderer.focusOnUnit?.(unitId, { onlyIfVisible: true });
+        renderer.triggerPipelineBoost(unitId);
+    }
+});
+
+eventBus.on("MAINTENANCE_SCHEDULED", ({ unitId }) => {
+    if (unitId) {
+        ui.selectUnit(unitId);
+        renderer.focusOnUnit?.(unitId, { onlyIfVisible: false });
+    }
+});
+
+/**
+ * Aktualisiert den Aufnahme-Schalter in der Toolbar entsprechend dem aktuellen Aufnahmezustand.
+ * @param {boolean} active - `true`, wenn Aufnahme aktiv ist; `false` andernfalls. Beeinflusst CSS-Klasse, ARIA-Attribut und sichtbaren Button-Text.
+ */
 function updateRecordButtonState(active) {
   if (!recordToolbarButton) {
     return;
@@ -305,27 +347,33 @@ const toolbarScenarioButtons = document.querySelectorAll("[data-scenario]");
 
 toolbarPresetButtons.forEach((button) => {
   button.addEventListener("click", () => {
+    audio.play("click");
     const preset = button.dataset.preset;
     applyPreset(preset);
   });
+  button.addEventListener("mouseenter", () => audio.play("hover"));
 });
 
 toolbarUnitButtons.forEach((button) => {
   button.addEventListener("click", () => {
+    audio.play("click");
     const target = button.dataset.unitTarget || null;
     setSelectedUnit(target);
     ui.selectUnit(target);
   });
+  button.addEventListener("mouseenter", () => audio.play("hover"));
 });
 
 toolbarScenarioButtons.forEach((button) => {
   button.addEventListener("click", () => {
+    audio.play("click");
     const scenario = button.dataset.scenario;
     if (!scenario) return;
     simulation.applyScenario(scenario);
     ui.setScenario(scenario);
     updateScenarioButtons(scenario);
   });
+  button.addEventListener("mouseenter", () => audio.play("hover"));
 });
 
 const sliderInputs = document.querySelectorAll('#hud input[type="range"]');
@@ -383,6 +431,7 @@ if (mapToolbar) {
   mapToolbar.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-command]");
     if (!button) return;
+    audio.play("click");
     const command = button.dataset.command;
     handleToolbarCommand(command);
   });
@@ -546,6 +595,7 @@ surface.addEventListener("click", (event) => {
     panMoved = false;
     return;
   }
+  audio.play("click");
   const rect = surface.getBoundingClientRect();
   const pointerX = (event.clientX - rect.left) * renderer.deviceScaleX;
   const pointerY = (event.clientY - rect.top) * renderer.deviceScaleY;
@@ -557,10 +607,18 @@ surface.addEventListener("click", (event) => {
 });
 
 const clock = { last: performance.now() };
+/**
+ * Treibt die Simulation voran, rendert den aktuellen Frame und plant den nächsten Animationsschritt.
+ *
+ * Aktualisiert den Simulationszustand anhand der verstrichenen Zeit, synchronisiert Recorder-, Logistik- und Flow-Zustände mit UI und Renderer, aktualisiert die Unit-Pulse-Anzeige und fordert den nächsten Aufruf via requestAnimationFrame an.
+ *
+ * @param {number} now - High‑resolution Zeitstempel in Millisekunden (wie von requestAnimationFrame bereitgestellt).
+ */
 function animate(now) {
   const delta = (now - clock.last) / 1000;
   clock.last = now;
   simulation.update(delta);
+
   const recorderState =
     typeof simulation.getRecorderState === "function"
       ? simulation.getRecorderState()
@@ -623,6 +681,12 @@ function updateScenarioButtons(key) {
   updateScenarioMenuActive(key);
 }
 
+/**
+ * Initialisiert und verbindet alle Menü-Interaktionen und zugehörigen Event-Handler der Benutzeroberfläche.
+ *
+ * Registriert Klick- und Hover-Handler für Menü-Buttons, verarbeitet Menüeintragsaktionen (Scenario-Auswahl, Unit-Auswahl und benannte Aktionen),
+ * schließt Menüs bei Klick außerhalb oder bei Escape, bindet den Hauptmenü-Umschalter zum Start/Stop der Simulation und verbindet das Import-Input mit dem Snapshot-Importer.
+ */
 function initializeMenus() {
   if (!menuBar) {
     return;
@@ -630,11 +694,13 @@ function initializeMenus() {
   const menuButtons = menuBar.querySelectorAll(".menu > .menu-item:not(.menu-action)");
   menuButtons.forEach((button) => {
     button.addEventListener("click", (event) => {
+      audio.play("click");
       event.preventDefault();
       event.stopPropagation();
       const menu = event.currentTarget.closest(".menu");
       toggleMenu(menu);
     });
+    button.addEventListener("mouseenter", () => audio.play("hover"));
   });
 
   menuBar.addEventListener("click", (event) => {
@@ -642,6 +708,7 @@ function initializeMenus() {
     if (!entry || !menuBar.contains(entry)) {
       return;
     }
+    audio.play("click");
     event.preventDefault();
     const action = entry.dataset.action;
     const scenario = entry.dataset.scenario;
@@ -673,6 +740,7 @@ function initializeMenus() {
 
   if (menuToggle) {
     menuToggle.addEventListener("click", () => {
+      audio.play(simulation.running ? "toggle_off" : "toggle_on");
       const running = simulation.toggleRunning();
       ui.setRunning(running);
     });
@@ -683,17 +751,29 @@ function initializeMenus() {
   }
 }
 
+/**
+ * Schaltet den Sicht- und ARIA-Zustand eines Menü-Elements um und verwaltet die aktuell geöffnete Menüreferenz.
+ *
+ * Öffnet oder schließt das übergebene DOM-Element als Menü: spielt den passenden Audioclip
+ * ("open" bzw. "close"), fügt die CSS-Klasse "open" hinzu oder entfernt sie, setzt
+ * das Attribut `aria-expanded` des enthaltenen `.menu-item`-Buttons falls vorhanden,
+ * ruft beim Öffnen `closeMenus()` auf und aktualisiert die globale Variable `activeMenu`.
+ *
+ * @param {HTMLElement|null} menu - Das Menü-DOM-Element, das umgeschaltet werden soll. Bei `null` passiert nichts.
+ */
 function toggleMenu(menu) {
   if (!menu) return;
   const button = menu.querySelector(".menu-item");
   const isOpen = menu.classList.contains("open");
   if (isOpen) {
+    audio.play("close");
     menu.classList.remove("open");
     if (button) {
       button.setAttribute("aria-expanded", "false");
     }
     activeMenu = null;
   } else {
+    audio.play("open");
     closeMenus();
     menu.classList.add("open");
     if (button) {
@@ -703,9 +783,18 @@ function toggleMenu(menu) {
   }
 }
 
+/**
+ * Schließt alle aktuell geöffneten Menüs und setzt die Menü-Zustände zurück.
+ *
+ * Entfernt den visuellen Offen-Status von Menüelementen, setzt das `aria-expanded`-Attribut der zugehörigen Schaltflächen auf `"false"`, spielt bei vorhandenen offenen Menüs den Schließ-Sound ab und setzt `activeMenu` auf `null`.
+ */
 function closeMenus() {
   if (!menuBar) return;
-  menuBar.querySelectorAll(".menu.open").forEach((menu) => {
+  const openMenus = menuBar.querySelectorAll(".menu.open");
+  if (openMenus.length > 0) {
+      audio.play("close");
+  }
+  openMenus.forEach((menu) => {
     menu.classList.remove("open");
     const button = menu.querySelector(".menu-item");
     if (button) {
@@ -1604,10 +1693,17 @@ function clearPipelineHighlight() {
   renderer.setHighlightedPipelines([]);
 }
 
+/**
+ * Setzt die aktuell ausgewählte Einheit und synchronisiert UI, Renderer und Kontext.
+ *
+ * Aktualisiert die interne Auswahl (oder entfernt sie, wenn kein Wert übergeben wird), informiert den Renderer, passt die Unit-Buttons und die Toolbar-Kontextaktion an und sorgt dafür, dass die zugehörigen Pipelines hervorgehoben oder die Hervorhebung entfernt werden.
+ * @param {string|null|undefined} unitId - Die ID der auszuwählenden Einheit; bei `null`/`undefined` oder leerem Wert wird die Auswahl aufgehoben.
+ */
 function setSelectedUnit(unitId) {
   selectedUnitId = unitId || null;
   renderer.setSelectedUnit(selectedUnitId);
   updateUnitButtons(selectedUnitId);
+  updateToolbarContext(selectedUnitId);
   if (selectedUnitId) {
     highlightPipelinesForUnit(selectedUnitId);
   } else {
@@ -1615,6 +1711,50 @@ function setSelectedUnit(unitId) {
   }
 }
 
+/**
+ * Aktualisiert die kontextabhängigen Toolbar-Schaltflächen und zeigt einen passenden Hinweis an.
+ *
+ * Aktiviert die Befehle "inspection", "build-pipe" und "bulldoze", wenn eine Einheit ausgewählt ist;
+ * deaktiviert sie andernfalls und passt die visuelle Darstellung an. Zeigt außerdem einen UI-Hinweis,
+ * der entweder die aktuelle Einheits-ID oder eine Aufforderung zur Auswahl einer Einheit enthält.
+ *
+ * @param {string|undefined|null} unitId - Die ID der aktuell ausgewählten Einheit; `undefined` oder `null` entfernt die Auswahl.
+ */
+function updateToolbarContext(unitId) {
+  if (!mapToolbar) return;
+  const contextButtons = mapToolbar.querySelectorAll('button[data-command]');
+  contextButtons.forEach(btn => {
+    const cmd = btn.dataset.command;
+    if (['inspection', 'build-pipe', 'bulldoze'].includes(cmd)) {
+        if (unitId) {
+            btn.removeAttribute('disabled');
+            btn.classList.remove('ghost');
+        } else {
+            btn.setAttribute('disabled', 'true');
+            btn.classList.add('ghost');
+        }
+    }
+  });
+
+  if (unitId) {
+      ui.showHint(`Selected unit: ${unitId}. Try INSPECT or MAINT.`);
+  } else {
+      ui.showHint("Select a unit to see available operations.");
+  }
+}
+
+/**
+ * Führt die durch eine Toolbar-Aktion bezeichnete Operation aus.
+ *
+ * Unterstützte Befehle und ihr Effekt:
+ * - "record-demo": schaltet die Performance-Aufzeichnung um und aktualisiert die Aufnahmetaste.
+ * - "inspection": startet eine Inspektion; wenn keine Einheit ausgewählt ist, wird eine allgemeine Inspektion ausgelöst, sonst wird die Inspektion für die ausgewählte Einheit angefordert.
+ * - "build-road": löst den Versand eines Konvois aus.
+ * - "build-pipe": fordert das Bereitstellen eines Pipeline-Bypasses für die ausgewählte Einheit an.
+ * - "bulldoze": plant Wartungs-/Entfernungsarbeiten für die ausgewählte Einheit.
+ *
+ * @param {string} command - Einer der unterstützten Befehls-Schlüssel: "record-demo", "inspection", "build-road", "build-pipe" oder "bulldoze".
+ */
 function handleToolbarCommand(command) {
   switch (command) {
     case "record-demo":
@@ -1627,36 +1767,19 @@ function handleToolbarCommand(command) {
         simulation.performInspection(null);
         break;
       }
-      const report = simulation.performInspection(selectedUnitId);
-      if (report) {
-        if (typeof ui.recordInspectionReport === "function") {
-          ui.recordInspectionReport(report);
-        }
-        renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: true });
-        highlightPipelinesForUnit(selectedUnitId);
-      }
+      // Use command system
+      commandSystem.dispatch({ type: "INSPECT_UNIT", payload: { unitId: selectedUnitId } });
       break;
     case "build-road": {
-      const result = simulation.dispatchLogisticsConvoy();
-      if (result?.product && typeof ui.flashStorageLevel === "function") {
-        ui.flashStorageLevel(result.product);
-      }
+      commandSystem.dispatch({ type: "DISPATCH_CONVOY", payload: {} });
       break;
     }
     case "build-pipe": {
-      const success = simulation.deployPipelineBypass(selectedUnitId);
-      if (success && selectedUnitId) {
-        highlightPipelinesForUnit(selectedUnitId);
-        renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: true });
-      }
+      commandSystem.dispatch({ type: "DEPLOY_BYPASS", payload: { unitId: selectedUnitId } });
       break;
     }
     case "bulldoze": {
-      const scheduled = simulation.scheduleTurnaround(selectedUnitId);
-      if (scheduled && selectedUnitId) {
-        ui.selectUnit(selectedUnitId);
-        renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: false });
-      }
+      commandSystem.dispatch({ type: "SCHEDULE_MAINTENANCE", payload: { unitId: selectedUnitId } });
       break;
     }
     default:
