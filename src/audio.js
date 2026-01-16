@@ -7,8 +7,16 @@ export class AudioController {
 
     // Attempt to initialize on user interaction
     this._initHandler = () => {
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) {
+        window.removeEventListener('click', this._initHandler);
+        window.removeEventListener('keydown', this._initHandler);
+        this.enabled = false;
+        return;
+      }
+
       if (!this.context) {
-        this.context = new (window.AudioContext || window.webkitAudioContext)();
+        this.context = new AudioCtor();
         this.masterGain = this.context.createGain();
         this.masterGain.gain.value = 0.3; // Default volume
         this.masterGain.connect(this.context.destination);

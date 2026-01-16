@@ -448,6 +448,10 @@ export class RefinerySimulation {
 
   toggleRunning() {
     this.running = !this.running;
+    if (!this.running && this._nextMissionTimer) {
+        clearTimeout(this._nextMissionTimer);
+        this._nextMissionTimer = null;
+    }
     return this.running;
   }
 
@@ -458,6 +462,10 @@ export class RefinerySimulation {
   }
 
   reset() {
+    if (this._nextMissionTimer) {
+        clearTimeout(this._nextMissionTimer);
+        this._nextMissionTimer = null;
+    }
     this.timeMinutes = 0;
     this._accumulator = 0;
     this.running = true;
@@ -1070,15 +1078,14 @@ export class RefinerySimulation {
     activeAlerts.forEach((alert) => {
       let id;
       if (alert.type === "unit") {
-        id = `unit-${alert.unitId}-${alert.severity}`;
+        // Exclude severity to stable ID so severity changes update the same alert
+        id = `unit-${alert.unitId}`;
       } else if (alert.type === "storage") {
         const productPart = alert.product || "unknown";
-        const severityPart = alert.severity || "info";
-        id = `storage-${productPart}-${severityPart}`;
+        id = `storage-${productPart}`;
       } else {
         const typePart = alert.type || "alert";
-        const severityPart = alert.severity || "info";
-        id = `${typePart}-${severityPart}`;
+        id = `${typePart}`;
       }
 
       activeAlertsById.set(id, alert);
@@ -1106,13 +1113,10 @@ export class RefinerySimulation {
       const ratePerMinute = convoy.totalVolume / convoy.duration;
       const drain = Math.min(convoy.remainingVolume, ratePerMinute * deltaMinutes);
 
-      if (this.storage.levels[convoy.product] >= drain) {
-         this.storage.levels[convoy.product] -= drain;
-         convoy.remainingVolume -= drain;
-      } else {
-         // Storage empty, stop draining but keep convoy running or finish early?
-         // For visual sake, let it run but no drain.
-      }
+      const available = this.storage.levels[convoy.product] || 0;
+      const amountToDrain = Math.min(available, drain);
+      this.storage.levels[convoy.product] = Math.max(0, available - amountToDrain);
+      convoy.remainingVolume -= drain; // Always decrement progress even if empty
 
       if (convoy.elapsed >= convoy.duration || convoy.remainingVolume <= 0.01) {
          this.pushLog("info", `Convoy returned. ${convoy.totalVolume.toFixed(0)} kb of ${this._formatProductLabel(convoy.product)} cleared.`);
@@ -3122,7 +3126,11 @@ export class RefinerySimulation {
       }
 
       if (mission.next) {
-        setTimeout(() => this.startMission(mission.next), 3000);
+        this._nextMissionTimer = setTimeout(() => {
+            if (this.running) {
+                this.startMission(mission.next);
+            }
+        }, 3000);
       }
     }
   }

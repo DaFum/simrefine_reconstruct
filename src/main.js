@@ -1721,6 +1721,7 @@ function setSelectedUnit(unitId) {
  * @param {string|undefined|null} unitId - Die ID der aktuell ausgewählten Einheit; `undefined` oder `null` entfernt die Auswahl.
  */
 function updateToolbarContext(unitId) {
+  if (!mapToolbar) return;
   const contextButtons = mapToolbar.querySelectorAll('button[data-command]');
   contextButtons.forEach(btn => {
     const cmd = btn.dataset.command;
