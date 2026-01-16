@@ -1,0 +1,149 @@
+/* Window Components */
+.window {
+  background: linear-gradient(180deg, var(--window-bg-light), var(--window-bg-dark));
+  border: 2px solid var(--window-border-light);
+  border-right-color: var(--window-border-dark);
+  border-bottom-color: var(--window-border-dark);
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.window-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.85rem;
+  background: linear-gradient(180deg, var(--header-grad-top), var(--header-grad-bottom));
+  color: var(--header-text);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  cursor: default; /* Will be grab for draggable */
+}
+
+.window-body {
+  padding: 12px;
+  background: repeating-linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.24),
+      rgba(255, 255, 255, 0.24) 2px,
+      rgba(255, 255, 255, 0.1) 2px,
+      rgba(255, 255, 255, 0.1) 4px
+    ),
+    rgba(232, 232, 232, 0.82);
+  flex: 1;
+  overflow: auto;
+}
+
+/* Panels */
+.panel {
+  background: rgba(248, 248, 248, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-right-color: rgba(120, 120, 120, 0.7);
+  border-bottom-color: rgba(120, 120, 120, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(90, 90, 90, 0.25);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--accent-blue);
+}
+
+/* Menu Bar */
+.menu-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: linear-gradient(180deg, rgba(45, 72, 109, 0.94), rgba(15, 26, 42, 0.94));
+  border: 2px solid rgba(27, 45, 70, 0.7);
+  box-shadow: inset 0 1px 0 rgba(173, 204, 255, 0.3), inset 0 -1px 0 rgba(8, 12, 22, 0.5);
+  border-radius: 3px;
+}
+
+.menu-item {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #d9e9ff;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+/* Toolbars */
+.map-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--toolbar-bg);
+  padding: 10px;
+  border: 2px solid var(--toolbar-border);
+  box-shadow: inset 2px 2px 0 #f8f8f8, inset -2px -2px 0 #5a5a5a;
+}
+
+.toolbar-button {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  padding: 6px 8px;
+  color: #1a1a1a;
+  background: linear-gradient(#e7e7e7, #c9c9c9);
+  border: 2px solid #ffffff;
+  border-bottom-color: #707070;
+  border-right-color: #707070;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.toolbar-button:active, .toolbar-button.active {
+    border-top-color: #707070;
+    border-left-color: #707070;
+    border-bottom-color: #ffffff;
+    border-right-color: #ffffff;
+}
+
+.toolbar-button.active {
+  background: linear-gradient(#4471af, #325686);
+  color: #f5f9ff;
+}
+
+/* Metrics */
+.metric, .metric-wide {
+  background: var(--metric-bg);
+  border: 1px solid var(--metric-border);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-mono);
+}
+
+.metric h3, .metric-wide h3 {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #2a2a2a;
+}
+
+.metric span, .metric-wide span {
+  font-size: 1rem;
+  color: #0b2447;
+}

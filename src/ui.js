@@ -5,9 +5,10 @@ const PRODUCT_LABELS = {
 };
 
 export class UIController {
-  constructor(simulation, audio) {
+  constructor(simulation, audio, commandSystem) {
     this.simulation = simulation;
     this.audio = audio;
+    this.commandSystem = commandSystem;
     this.selectedUnitId = null;
     this.lastLogSignature = "";
     this.modeFlashTimeout = null;
@@ -118,6 +119,23 @@ export class UIController {
     this.previousMetrics = {};
     this.activeAnimations = new Map();
     this._injectHintLayer();
+    this._bindEvents();
+  }
+
+  _bindEvents() {
+    if (!this.commandSystem || !this.commandSystem.eventBus) return;
+    const bus = this.commandSystem.eventBus;
+
+    bus.on("INSPECTION_COMPLETED", (data) => {
+        this.recordInspectionReport(data.report);
+        this.audio?.play('success');
+    });
+
+    bus.on("CONVOY_DISPATCHED", (data) => {
+        this.flashStorageLevel(data.product);
+    });
+
+    // We could add more listeners here for UI reactions to system events
   }
 
   _injectHintLayer() {
@@ -151,31 +169,31 @@ export class UIController {
 
     elements.crude.addEventListener("input", (event) => {
       const value = Number(event.target.value);
-      simulation.setParam("crudeIntake", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "crudeIntake", value } });
       elements.crudeValue.textContent = `${value.toFixed(0)} kbpd`;
     });
 
     elements.focus.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
-      simulation.setParam("productFocus", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "productFocus", value } });
       elements.focusValue.textContent = value > 0.5 ? "Gasoline" : value < 0.5 ? "Diesel" : "Balanced";
     });
 
     elements.maintenance.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
-      simulation.setParam("maintenance", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "maintenance", value } });
       elements.maintenanceValue.textContent = `${Math.round(value * 100)}%`;
     });
 
     elements.safety.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
-      simulation.setParam("safety", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "safety", value } });
       elements.safetyValue.textContent = `${Math.round(value * 100)}%`;
     });
 
     elements.environment.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
-      simulation.setParam("environment", value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "environment", value } });
       elements.environmentValue.textContent = `${Math.round(value * 100)}%`;
     });
 
@@ -204,7 +222,7 @@ export class UIController {
     });
 
     elements.scenario.addEventListener("change", (event) => {
-      simulation.applyScenario(event.target.value);
+      this.commandSystem.dispatch({ type: "APPLY_SCENARIO", payload: { scenario: event.target.value } });
       this._updateScenarioDescription();
     });
 
@@ -1277,11 +1295,15 @@ export class UIController {
     slider.addEventListener("input", (event) => {
       const value = Number(event.target.value) / 100;
       throttleValue.textContent = `${Math.round(value * 100)}%`;
+      // We don't dispatch real-time throttle updates to history/command log,
+      // but we do want live feedback. We'll set quietly directly or via a "preview" command.
+      // For now, let's keep direct set for quiet updates to avoid spamming the event bus,
+      // or implement a debounced command.
       this.simulation.setUnitThrottle(unit.id, value, { quiet: true });
     });
     slider.addEventListener("change", (event) => {
       const value = Number(event.target.value) / 100;
-      this.simulation.setUnitThrottle(unit.id, value);
+      this.commandSystem.dispatch({ type: "SET_THROTTLE", payload: { unitId: unit.id, value } });
       this.selectUnit(unit.id);
     });
     throttleWrapper.append(label, slider);
@@ -1299,7 +1321,7 @@ export class UIController {
         : "Bring Unit Online"
       : "Take Unit Offline";
     toggleButton.addEventListener("click", () => {
-      this.simulation.setUnitOffline(unit.id, !offlineActive);
+      this.commandSystem.dispatch({ type: "TOGGLE_UNIT_OFFLINE", payload: { unitId: unit.id, offline: !offlineActive } });
       this.selectUnit(unit.id);
     });
     buttonRow.appendChild(toggleButton);
@@ -1311,7 +1333,7 @@ export class UIController {
     clearButton.textContent = "Clear Overrides";
     clearButton.disabled = !hasOverride;
     clearButton.addEventListener("click", () => {
-      this.simulation.clearUnitOverride(unit.id);
+      this.commandSystem.dispatch({ type: "CLEAR_OVERRIDE", payload: { unitId: unit.id } });
       this.selectUnit(unit.id);
     });
     buttonRow.appendChild(clearButton);

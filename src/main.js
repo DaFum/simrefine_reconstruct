@@ -2,6 +2,10 @@ import { RefinerySimulation } from "./simulation.js?v=3";
 import { UIController } from "./ui.js?v=3";
 import { TileRenderer } from "./renderer3d.js?v=3";
 import { AudioController } from "./audio.js";
+import { EventBus } from "./eventBus.js";
+import { CommandSystem } from "./commandSystem.js";
+import { ThemeManager } from "./themeManager.js";
+import { WindowManager } from "./windowManager.js";
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const HOURS_PER_DAY = 24;
@@ -35,12 +39,19 @@ const mapStatusPanel = document.querySelector(".map-status");
 
 sceneContainer.innerHTML = "";
 
+const eventBus = new EventBus();
 const audio = new AudioController();
 const simulation = new RefinerySimulation();
-const ui = new UIController(simulation, audio);
+const commandSystem = new CommandSystem(simulation, eventBus);
+const ui = new UIController(simulation, audio, commandSystem);
+// Renderer is created later, so we initialize ThemeManager after renderer creation
 if (typeof ui.setModeBadge === "function") {
   ui.setModeBadge("AUTO");
 }
+
+const windowManager = new WindowManager("desktop");
+// Expose for debugging
+window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem };
 
 const processTopology = simulation.getProcessTopology?.() || {};
 const unitConnectionIndex = buildUnitConnectionIndex(processTopology);
@@ -188,6 +199,7 @@ const pipelineConfigs = [
 
 
 const renderer = new TileRenderer(sceneContainer, simulation, unitConfigs, pipelineConfigs);
+const themeManager = new ThemeManager(renderer, eventBus);
 const surface = renderer.getSurface();
 
 const unitPulseEntries = new Map();
@@ -1670,25 +1682,20 @@ function handleToolbarCommand(command) {
         simulation.performInspection(null);
         break;
       }
-      const report = simulation.performInspection(selectedUnitId);
-      if (report) {
-        if (typeof ui.recordInspectionReport === "function") {
-          ui.recordInspectionReport(report);
-        }
-        renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: true });
-        highlightPipelinesForUnit(selectedUnitId);
-      }
+      // Use command system
+      commandSystem.dispatch({ type: "INSPECT_UNIT", payload: { unitId: selectedUnitId } });
+
+      // Visual response (immediate feedback) - could also be handled by event bus listener
+      renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: true });
+      highlightPipelinesForUnit(selectedUnitId);
       break;
     case "build-road": {
-      const result = simulation.dispatchLogisticsConvoy();
-      if (result?.product && typeof ui.flashStorageLevel === "function") {
-        ui.flashStorageLevel(result.product);
-      }
+      commandSystem.dispatch({ type: "DISPATCH_CONVOY", payload: {} });
       break;
     }
     case "build-pipe": {
-      const success = simulation.deployPipelineBypass(selectedUnitId);
-      if (success && selectedUnitId) {
+      commandSystem.dispatch({ type: "DEPLOY_BYPASS", payload: { unitId: selectedUnitId } });
+      if (selectedUnitId) {
         highlightPipelinesForUnit(selectedUnitId);
         renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: true });
         renderer.triggerPipelineBoost(selectedUnitId);
@@ -1696,8 +1703,8 @@ function handleToolbarCommand(command) {
       break;
     }
     case "bulldoze": {
-      const scheduled = simulation.scheduleTurnaround(selectedUnitId);
-      if (scheduled && selectedUnitId) {
+      commandSystem.dispatch({ type: "SCHEDULE_MAINTENANCE", payload: { unitId: selectedUnitId } });
+      if (selectedUnitId) {
         ui.selectUnit(selectedUnitId);
         renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: false });
       }

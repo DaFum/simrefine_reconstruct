@@ -106,6 +106,12 @@ export class TileRenderer {
     this._initActionToys();
   }
 
+  setPalette(paletteDef) {
+      if (!paletteDef) return;
+      this.customPalette = paletteDef;
+      this._applyPalette(false);
+  }
+
   getSurface() {
     return this.renderer?.domElement;
   }
@@ -2129,6 +2135,7 @@ export class TileRenderer {
   }
 
   _getPalette() {
+    if (this.customPalette) return this.customPalette;
     return PALETTES[this.paletteIndex] || PALETTES[0];
   }
 }
