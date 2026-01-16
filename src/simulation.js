@@ -3056,6 +3056,9 @@ export class RefinerySimulation {
       failed: false
     };
 
+    // Explicitly reset UI metric flag
+    this.metrics.missionCompleted = false;
+
     this.pushLog("info", `Mission Started: ${missionDef.title}`);
     this.pushLog("info", missionDef.description);
   }

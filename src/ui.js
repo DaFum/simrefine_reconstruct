@@ -1600,6 +1600,5 @@ export class UIController {
     };
 
     this.activeAnimations.set(key, requestAnimationFrame(animate));
-    this.previousMetrics[key] = targetValue; // Update immediately to target for next frame reference if spamming
   }
 }

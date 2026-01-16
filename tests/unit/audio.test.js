@@ -11,8 +11,7 @@ describe('AudioController', () => {
 
   afterEach(() => {
     if (audio) {
-      window.removeEventListener('click', () => {});
-      window.removeEventListener('keydown', () => {});
+      audio.destroy();
     }
   });
 

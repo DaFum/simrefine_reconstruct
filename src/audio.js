@@ -6,7 +6,7 @@ export class AudioController {
     this.sounds = new Map();
 
     // Attempt to initialize on user interaction
-    const init = () => {
+    this._initHandler = () => {
       if (!this.context) {
         this.context = new (window.AudioContext || window.webkitAudioContext)();
         this.masterGain = this.context.createGain();
@@ -18,12 +18,24 @@ export class AudioController {
       if (this.context.state === 'suspended') {
         this.context.resume();
       }
-      window.removeEventListener('click', init);
-      window.removeEventListener('keydown', init);
+      window.removeEventListener('click', this._initHandler);
+      window.removeEventListener('keydown', this._initHandler);
     };
 
-    window.addEventListener('click', init);
-    window.addEventListener('keydown', init);
+    window.addEventListener('click', this._initHandler);
+    window.addEventListener('keydown', this._initHandler);
+  }
+
+  destroy() {
+    if (this._initHandler) {
+      window.removeEventListener('click', this._initHandler);
+      window.removeEventListener('keydown', this._initHandler);
+    }
+    if (this.context) {
+      this.context.close();
+      this.context = null;
+    }
+    this.enabled = false;
   }
 
   _generateSounds() {

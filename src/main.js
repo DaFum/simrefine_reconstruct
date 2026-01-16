@@ -606,9 +606,6 @@ surface.addEventListener("click", (event) => {
   ui.selectUnit(unitId);
 });
 
-// State tracking for alert changes
-const previousAlerts = new Map();
-
 const clock = { last: performance.now() };
 /**
  * Treibt die Simulation voran, rendert den aktuellen Frame und plant den nächsten Animationsschritt.
