@@ -37,7 +37,8 @@ export class WindowManager {
     const windowEls = this.container.querySelectorAll('.window');
     windowEls.forEach(el => {
       this.makeDraggable(el);
-      // this.makeResizable(el); // Resizing logic is complex without a library, simplifying for now
+      // TODO: Implement window resizing (currently windows are draggable only and cannot be resized).
+      // this.makeResizable(el);
       this.windows.push(el);
     });
 
@@ -100,8 +101,9 @@ export class WindowManager {
 
       this.windows.forEach(win => {
           // Check if window should be visible
-          // We identify windows by a class or ID. Let's use the second class (e.g. 'map-window')
-          const winClass = Array.from(win.classList).find(c => c.endsWith('-window'));
+          // Use data-window-id if available, fallback to finding class ending in -window
+          const winClass = win.dataset.windowId || Array.from(win.classList).find(c => c.endsWith('-window'));
+
           if (config.visible.includes(winClass)) {
               win.style.display = 'flex';
               // Apply layout if defined

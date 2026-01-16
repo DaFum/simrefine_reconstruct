@@ -2,43 +2,29 @@ export class CommandSystem {
   constructor(simulation, eventBus) {
     this.simulation = simulation;
     this.eventBus = eventBus;
+
+    this.handlers = {
+      'INSPECT_UNIT': this._handleInspectUnit.bind(this),
+      'DEPLOY_BYPASS': this._handleDeployBypass.bind(this),
+      'SCHEDULE_MAINTENANCE': this._handleScheduleMaintenance.bind(this),
+      'DISPATCH_CONVOY': this._handleDispatchConvoy.bind(this),
+      'SET_PARAM': this._handleSetParam.bind(this),
+      'SET_THROTTLE': this._handleSetThrottle.bind(this),
+      'TOGGLE_UNIT_OFFLINE': this._handleToggleUnitOffline.bind(this),
+      'CLEAR_OVERRIDE': this._handleClearOverride.bind(this),
+      'APPLY_SCENARIO': this._handleApplyScenario.bind(this),
+    };
   }
 
   dispatch(command) {
-    console.log("Dispatching command:", command);
     const { type, payload } = command;
 
     try {
-      switch (type) {
-        case "INSPECT_UNIT":
-          this._handleInspectUnit(payload);
-          break;
-        case "DEPLOY_BYPASS":
-          this._handleDeployBypass(payload);
-          break;
-        case "SCHEDULE_MAINTENANCE":
-          this._handleScheduleMaintenance(payload);
-          break;
-        case "DISPATCH_CONVOY":
-          this._handleDispatchConvoy(payload);
-          break;
-        case "SET_PARAM":
-          this._handleSetParam(payload);
-          break;
-        case "SET_THROTTLE":
-          this._handleSetThrottle(payload);
-          break;
-        case "TOGGLE_UNIT_OFFLINE":
-          this._handleToggleUnitOffline(payload);
-          break;
-        case "CLEAR_OVERRIDE":
-          this._handleClearOverride(payload);
-          break;
-        case "APPLY_SCENARIO":
-            this._handleApplyScenario(payload);
-            break;
-        default:
-          console.warn(`Unknown command type: ${type}`);
+      const handler = this.handlers[type];
+      if (handler) {
+        handler(payload);
+      } else {
+        console.warn(`Unknown command type: ${type}`);
       }
     } catch (err) {
       console.error(`Error processing command ${type}:`, err);
@@ -47,9 +33,9 @@ export class CommandSystem {
   }
 
   _handleInspectUnit({ unitId }) {
-    const report = this.simulation.performInspection(unitId);
-    if (report) {
-      this.eventBus.emit("INSPECTION_COMPLETED", { unitId, report });
+    const result = this.simulation.performInspection(unitId);
+    if (result) {
+      this.eventBus.emit("INSPECTION_STARTED", { unitId });
     }
   }
 
@@ -67,7 +53,7 @@ export class CommandSystem {
     }
   }
 
-  _handleDispatchConvoy() {
+  _handleDispatchConvoy(payload) {
     const result = this.simulation.dispatchLogisticsConvoy();
     if (result?.product) {
       this.eventBus.emit("CONVOY_DISPATCHED", { product: result.product });

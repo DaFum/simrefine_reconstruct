@@ -21,7 +21,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
-  position: relative; /* For absolute positioning of dragged windows if needed later */
+  position: relative; /* Required positioning context for absolutely positioned dragged windows managed by WindowManager */
 }
 
 /* Panel Layouts */

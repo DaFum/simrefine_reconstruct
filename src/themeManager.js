@@ -78,17 +78,24 @@ export class ThemeManager {
     this.renderer = renderer;
     this.eventBus = eventBus;
     this.currentTheme = "twilight";
+    this.activeDangerAlerts = new Set();
 
     this.eventBus.on("ALERT_RAISED", (alert) => {
         if (alert.severity === "danger") {
+            if (alert.id) {
+                this.activeDangerAlerts.add(alert.id);
+            }
             this.setTheme("emergency");
         }
     });
 
-    this.eventBus.on("ALERT_CLEARED", () => {
-        // Simple logic: revert to default if no danger.
-        // In a real app we'd check if other alerts exist.
-        if (this.currentTheme === "emergency") {
+    this.eventBus.on("ALERT_CLEARED", (alert) => {
+        if (alert && alert.id) {
+            this.activeDangerAlerts.delete(alert.id);
+        }
+
+        // Revert to default if no danger alerts remain
+        if (this.currentTheme === "emergency" && this.activeDangerAlerts.size === 0) {
             this.setTheme("twilight");
         }
     });

@@ -28,12 +28,16 @@
   --font-sans: "Roboto", sans-serif;
 }
 
-/* Theme: Twilight (Default) */
+/* Theme: Twilight (Default)
+ * Uses :root values for default styling.
+ */
+/*
 [data-theme="twilight"] {
   --desktop-bg: radial-gradient(circle at 20% 20%, #1c2a3a 0%, #0a101a 65%);
   --header-grad-top: #466a9f;
   --header-grad-bottom: #244165;
 }
+*/
 
 /* Theme: Daybreak */
 [data-theme="daybreak"] {

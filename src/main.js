@@ -50,8 +50,6 @@ if (typeof ui.setModeBadge === "function") {
 }
 
 const windowManager = new WindowManager("desktop");
-// Expose for debugging
-window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem };
 
 const processTopology = simulation.getProcessTopology?.() || {};
 const unitConnectionIndex = buildUnitConnectionIndex(processTopology);
@@ -199,8 +197,11 @@ const pipelineConfigs = [
 
 
 const renderer = new TileRenderer(sceneContainer, simulation, unitConfigs, pipelineConfigs);
-const themeManager = new ThemeManager(renderer, eventBus);
+new ThemeManager(renderer, eventBus);
 const surface = renderer.getSurface();
+
+// Expose for debugging after all systems are initialized
+window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem };
 
 const unitPulseEntries = new Map();
 const unitModeLabels = new Map();
@@ -242,6 +243,33 @@ const PRESETS = {
     log: "Emergency shutdown drill initiated.",
   },
 };
+
+// --- Event Listeners for Visual Feedback ---
+eventBus.on("INSPECTION_STARTED", ({ unitId }) => {
+    if (unitId && typeof renderer.focusOnUnit === "function") {
+        renderer.focusOnUnit(unitId, { onlyIfVisible: true });
+        highlightPipelinesForUnit(unitId);
+    }
+});
+
+eventBus.on("BYPASS_DEPLOYED", ({ unitId }) => {
+    if (unitId) {
+        highlightPipelinesForUnit(unitId);
+        renderer.focusOnUnit?.(unitId, { onlyIfVisible: true });
+        renderer.triggerPipelineBoost(unitId);
+    }
+});
+
+eventBus.on("MAINTENANCE_SCHEDULED", ({ unitId }) => {
+    if (unitId) {
+        ui.selectUnit(unitId);
+        renderer.focusOnUnit?.(unitId, { onlyIfVisible: false });
+    }
+});
+
+eventBus.on("CONVOY_DISPATCHED", ({ product }) => {
+    // Maybe some visual effect for convoy?
+});
 
 function updateRecordButtonState(active) {
   if (!recordToolbarButton) {
@@ -578,11 +606,54 @@ surface.addEventListener("click", (event) => {
   ui.selectUnit(unitId);
 });
 
+// State tracking for alert changes
+const previousAlerts = new Map();
+
 const clock = { last: performance.now() };
 function animate(now) {
   const delta = (now - clock.last) / 1000;
   clock.last = now;
   simulation.update(delta);
+
+  // Poll for completed inspections
+  if (typeof simulation.getCompletedInspections === "function") {
+      const reports = simulation.getCompletedInspections();
+      reports.forEach(report => {
+          eventBus.emit("INSPECTION_COMPLETED", { unitId: report.unitId, report });
+      });
+  }
+
+  // Track and emit alert changes
+  if (typeof simulation.getActiveAlerts === "function") {
+      const activeAlerts = simulation.getActiveAlerts();
+      const activeIds = new Set();
+
+      activeAlerts.forEach(alert => {
+          // Construct a unique ID for the alert
+          const id = alert.type === 'unit'
+              ? `unit-${alert.unitId}`
+              : `storage-${alert.product}-${alert.severity}`;
+
+          activeIds.add(id);
+
+          if (!previousAlerts.has(id)) {
+              // New alert
+              eventBus.emit("ALERT_RAISED", { ...alert, id });
+          }
+      });
+
+      // Check for cleared alerts
+      previousAlerts.forEach((_, id) => {
+          if (!activeIds.has(id)) {
+              eventBus.emit("ALERT_CLEARED", { id });
+          }
+      });
+
+      // Update cache
+      previousAlerts.clear();
+      activeIds.forEach(id => previousAlerts.set(id, true));
+  }
+
   const recorderState =
     typeof simulation.getRecorderState === "function"
       ? simulation.getRecorderState()
@@ -1684,10 +1755,6 @@ function handleToolbarCommand(command) {
       }
       // Use command system
       commandSystem.dispatch({ type: "INSPECT_UNIT", payload: { unitId: selectedUnitId } });
-
-      // Visual response (immediate feedback) - could also be handled by event bus listener
-      renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: true });
-      highlightPipelinesForUnit(selectedUnitId);
       break;
     case "build-road": {
       commandSystem.dispatch({ type: "DISPATCH_CONVOY", payload: {} });
@@ -1695,19 +1762,10 @@ function handleToolbarCommand(command) {
     }
     case "build-pipe": {
       commandSystem.dispatch({ type: "DEPLOY_BYPASS", payload: { unitId: selectedUnitId } });
-      if (selectedUnitId) {
-        highlightPipelinesForUnit(selectedUnitId);
-        renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: true });
-        renderer.triggerPipelineBoost(selectedUnitId);
-      }
       break;
     }
     case "bulldoze": {
       commandSystem.dispatch({ type: "SCHEDULE_MAINTENANCE", payload: { unitId: selectedUnitId } });
-      if (selectedUnitId) {
-        ui.selectUnit(selectedUnitId);
-        renderer.focusOnUnit?.(selectedUnitId, { onlyIfVisible: false });
-      }
       break;
     }
     default:
