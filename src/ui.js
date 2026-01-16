@@ -5,8 +5,9 @@ const PRODUCT_LABELS = {
 };
 
 export class UIController {
-  constructor(simulation) {
+  constructor(simulation, audio) {
     this.simulation = simulation;
+    this.audio = audio;
     this.selectedUnitId = null;
     this.lastLogSignature = "";
     this.modeFlashTimeout = null;
@@ -114,6 +115,35 @@ export class UIController {
     this.lastRecorderSignature = "";
     this.inspectionReports = new Map();
     this.storageFlashTimers = new Map();
+    this.previousMetrics = {};
+    this.activeAnimations = new Map();
+    this._injectHintLayer();
+  }
+
+  _injectHintLayer() {
+    const hintLayer = document.createElement("div");
+    hintLayer.id = "ui-hint-layer";
+    hintLayer.className = "ui-hint-layer";
+    hintLayer.setAttribute("aria-live", "polite");
+    document.body.appendChild(hintLayer);
+    this.elements.hintLayer = hintLayer;
+
+    // Initial hint
+    this.showHint("Welcome. Try: Click a unit → Inspect → Deploy PIPE");
+  }
+
+  showHint(message) {
+    if (!this.elements.hintLayer) return;
+    this.elements.hintLayer.textContent = message;
+    this.elements.hintLayer.classList.remove("visible");
+    // Trigger reflow
+    void this.elements.hintLayer.offsetWidth;
+    this.elements.hintLayer.classList.add("visible");
+
+    if (this.hintTimeout) clearTimeout(this.hintTimeout);
+    this.hintTimeout = setTimeout(() => {
+        this.elements.hintLayer.classList.remove("visible");
+    }, 5000);
   }
 
   _bindControls() {
@@ -149,16 +179,24 @@ export class UIController {
       elements.environmentValue.textContent = `${Math.round(value * 100)}%`;
     });
 
+    // Add sound on mouseup/keyup for sliders to not spam
+    [elements.crude, elements.focus, elements.maintenance, elements.safety, elements.environment].forEach(el => {
+        el.addEventListener('change', () => this.audio?.play('hover')); // using hover as a soft click
+    });
+
     elements.toggle.addEventListener("click", () => {
+      // Audio handled in main.js for toggle
       const running = simulation.toggleRunning();
       elements.toggle.textContent = running ? "Pause" : "Resume";
     });
 
     elements.step.addEventListener("click", () => {
+      this.audio?.play('click');
       simulation.requestStep();
     });
 
     elements.reset.addEventListener("click", () => {
+      this.audio?.play('click');
       simulation.reset();
       this.selectedUnitId = null;
       this._renderUnitDetails(null);
@@ -172,6 +210,7 @@ export class UIController {
 
     if (elements.logisticsExpedite && typeof simulation.requestExtraShipment === "function") {
       elements.logisticsExpedite.addEventListener("click", () => {
+        this.audio?.play('click');
         const result = simulation.requestExtraShipment();
         if (result && result.product) {
           this.flashStorageLevel(result.product);
@@ -182,6 +221,7 @@ export class UIController {
 
     if (elements.logisticsDelay && typeof simulation.delayNextShipment === "function") {
       elements.logisticsDelay.addEventListener("click", () => {
+        this.audio?.play('click');
         const delayed = simulation.delayNextShipment();
         if (delayed && delayed.product) {
           this.flashStorageLevel(delayed.product);
@@ -192,6 +232,7 @@ export class UIController {
 
     if (elements.logisticsExpand && typeof simulation.expandStorageCapacity === "function") {
       elements.logisticsExpand.addEventListener("click", () => {
+        this.audio?.play('click');
         const outcome = simulation.expandStorageCapacity();
         if (outcome && outcome.level) {
           this.update(simulation.getLogisticsState(), null);
@@ -280,6 +321,7 @@ export class UIController {
     if (!product) {
       return;
     }
+    this.audio?.play('alert');
     const key = product.charAt(0).toUpperCase() + product.slice(1);
     const bar = this.elements[`inventory${key}Bar`];
     if (!bar) {
@@ -407,36 +449,30 @@ export class UIController {
 
   _renderMetrics(metrics) {
     const formatBpd = (value) => `${value.toFixed(1)} kbpd`;
-    this.elements.gasolineOutput.textContent = formatBpd(metrics.gasoline);
-    this.elements.dieselOutput.textContent = formatBpd(metrics.diesel);
-    this.elements.jetOutput.textContent = formatBpd(metrics.jet);
-    this.elements.lpgOutput.textContent = formatBpd(metrics.lpg);
 
-    this.elements.profitOutput.textContent = `${this.profitFormatter.format(
-      Math.round(metrics.profitPerHour * 1000)
-    )} / hr`;
+    // Animate throughputs
+    this._animateMetric(this.elements.gasolineOutput, 'gasoline', metrics.gasoline, formatBpd);
+    this._animateMetric(this.elements.dieselOutput, 'diesel', metrics.diesel, formatBpd);
+    this._animateMetric(this.elements.jetOutput, 'jet', metrics.jet, formatBpd);
+    this._animateMetric(this.elements.lpgOutput, 'lpg', metrics.lpg, formatBpd);
+
+    // Animate Financials
+    const profitVal = Math.round(metrics.profitPerHour * 1000);
+    this._animateMetric(this.elements.profitOutput, 'profit', profitVal, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
 
     if (this.elements.revenueOutput) {
-      const revenue = typeof metrics.revenuePerDay === "number" ? metrics.revenuePerDay : 0;
-      this.elements.revenueOutput.textContent = `${this.profitFormatter.format(
-        Math.round(revenue * 1000)
-      )} / day`;
+      const revenue = typeof metrics.revenuePerDay === "number" ? Math.round(metrics.revenuePerDay * 1000) : 0;
+      this._animateMetric(this.elements.revenueOutput, 'revenue', revenue, (val) => `${this.profitFormatter.format(Math.round(val))} / day`);
     }
 
     if (this.elements.expenseOutput) {
-      const expensePerHour =
-        typeof metrics.expensePerDay === "number" ? metrics.expensePerDay / 24 : 0;
-      this.elements.expenseOutput.textContent = `${this.profitFormatter.format(
-        Math.round(expensePerHour * 1000)
-      )} / hr`;
+      const expensePerHour = typeof metrics.expensePerDay === "number" ? Math.round((metrics.expensePerDay / 24) * 1000) : 0;
+      this._animateMetric(this.elements.expenseOutput, 'expense', expensePerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
     }
 
     if (this.elements.penaltyOutput) {
-      const penaltyPerHour =
-        typeof metrics.penaltyPerDay === "number" ? metrics.penaltyPerDay / 24 : 0;
-      this.elements.penaltyOutput.textContent = `${this.profitFormatter.format(
-        Math.round(penaltyPerHour * 1000)
-      )} / hr`;
+      const penaltyPerHour = typeof metrics.penaltyPerDay === "number" ? Math.round((metrics.penaltyPerDay / 24) * 1000) : 0;
+      this._animateMetric(this.elements.penaltyOutput, 'penalty', penaltyPerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
     }
 
     if (this.elements.marginOutput) {
@@ -628,6 +664,21 @@ export class UIController {
     if (signature === this.lastLogSignature) {
       return;
     }
+
+    // Check if new log is warning/danger and play sound
+    if (logs.length > 0) {
+        const latest = logs[0];
+        const lastSigParts = this.lastLogSignature.split('-');
+        // Basic check if it's actually new
+        if (latest.timestamp !== lastSigParts[0] || latest.message !== lastSigParts.slice(1).join('-')) {
+            if (latest.level === 'danger') {
+                this.audio?.play('error');
+            } else if (latest.level === 'warning') {
+                this.audio?.play('warning');
+            }
+        }
+    }
+
     this.lastLogSignature = signature;
 
     this.elements.logList.innerHTML = "";
@@ -1458,5 +1509,44 @@ export class UIController {
     const hour12 = ((hours + 11) % 12) + 1;
     const ampm = hours >= 12 ? "PM" : "AM";
     this.elements.clock.textContent = `${month} ${day}, ${year} ${String(hour12).padStart(2, "0")}:${minutes} ${ampm}`;
+  }
+
+  _animateMetric(element, key, targetValue, formatter) {
+    if (!element) return;
+
+    const previous = this.previousMetrics[key] ?? targetValue;
+    if (Math.abs(previous - targetValue) < 0.1) {
+        element.textContent = formatter(targetValue);
+        this.previousMetrics[key] = targetValue;
+        return;
+    }
+
+    // Cancel existing animation for this key
+    if (this.activeAnimations.has(key)) {
+        cancelAnimationFrame(this.activeAnimations.get(key));
+    }
+
+    const startValue = previous;
+    const startTime = performance.now();
+    const duration = 400; // ms
+
+    const animate = (now) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3); // cubic ease out
+
+        const current = startValue + (targetValue - startValue) * ease;
+        element.textContent = formatter(current);
+
+        if (progress < 1) {
+            this.activeAnimations.set(key, requestAnimationFrame(animate));
+        } else {
+            this.activeAnimations.delete(key);
+            this.previousMetrics[key] = targetValue;
+        }
+    };
+
+    this.activeAnimations.set(key, requestAnimationFrame(animate));
+    this.previousMetrics[key] = targetValue; // Update immediately to target for next frame reference if spamming
   }
 }

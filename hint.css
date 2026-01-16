@@ -1,0 +1,23 @@
+.ui-hint-layer {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(10, 18, 30, 0.85);
+  border: 1px solid rgba(100, 160, 240, 0.5);
+  padding: 8px 16px;
+  border-radius: 20px;
+  color: #dcebfb;
+  font-family: "Inconsolata", monospace;
+  font-size: 0.85rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.ui-hint-layer.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

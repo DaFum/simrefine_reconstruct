@@ -1,6 +1,7 @@
 import { RefinerySimulation } from "./simulation.js?v=3";
 import { UIController } from "./ui.js?v=3";
 import { TileRenderer } from "./renderer3d.js?v=3";
+import { AudioController } from "./audio.js";
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const HOURS_PER_DAY = 24;
@@ -34,8 +35,9 @@ const mapStatusPanel = document.querySelector(".map-status");
 
 sceneContainer.innerHTML = "";
 
+const audio = new AudioController();
 const simulation = new RefinerySimulation();
-const ui = new UIController(simulation);
+const ui = new UIController(simulation, audio);
 if (typeof ui.setModeBadge === "function") {
   ui.setModeBadge("AUTO");
 }
@@ -305,27 +307,33 @@ const toolbarScenarioButtons = document.querySelectorAll("[data-scenario]");
 
 toolbarPresetButtons.forEach((button) => {
   button.addEventListener("click", () => {
+    audio.play("click");
     const preset = button.dataset.preset;
     applyPreset(preset);
   });
+  button.addEventListener("mouseenter", () => audio.play("hover"));
 });
 
 toolbarUnitButtons.forEach((button) => {
   button.addEventListener("click", () => {
+    audio.play("click");
     const target = button.dataset.unitTarget || null;
     setSelectedUnit(target);
     ui.selectUnit(target);
   });
+  button.addEventListener("mouseenter", () => audio.play("hover"));
 });
 
 toolbarScenarioButtons.forEach((button) => {
   button.addEventListener("click", () => {
+    audio.play("click");
     const scenario = button.dataset.scenario;
     if (!scenario) return;
     simulation.applyScenario(scenario);
     ui.setScenario(scenario);
     updateScenarioButtons(scenario);
   });
+  button.addEventListener("mouseenter", () => audio.play("hover"));
 });
 
 const sliderInputs = document.querySelectorAll('#hud input[type="range"]');
@@ -383,6 +391,7 @@ if (mapToolbar) {
   mapToolbar.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-command]");
     if (!button) return;
+    audio.play("click");
     const command = button.dataset.command;
     handleToolbarCommand(command);
   });
@@ -546,6 +555,7 @@ surface.addEventListener("click", (event) => {
     panMoved = false;
     return;
   }
+  audio.play("click");
   const rect = surface.getBoundingClientRect();
   const pointerX = (event.clientX - rect.left) * renderer.deviceScaleX;
   const pointerY = (event.clientY - rect.top) * renderer.deviceScaleY;
@@ -630,11 +640,13 @@ function initializeMenus() {
   const menuButtons = menuBar.querySelectorAll(".menu > .menu-item:not(.menu-action)");
   menuButtons.forEach((button) => {
     button.addEventListener("click", (event) => {
+      audio.play("click");
       event.preventDefault();
       event.stopPropagation();
       const menu = event.currentTarget.closest(".menu");
       toggleMenu(menu);
     });
+    button.addEventListener("mouseenter", () => audio.play("hover"));
   });
 
   menuBar.addEventListener("click", (event) => {
@@ -642,6 +654,7 @@ function initializeMenus() {
     if (!entry || !menuBar.contains(entry)) {
       return;
     }
+    audio.play("click");
     event.preventDefault();
     const action = entry.dataset.action;
     const scenario = entry.dataset.scenario;
@@ -673,6 +686,7 @@ function initializeMenus() {
 
   if (menuToggle) {
     menuToggle.addEventListener("click", () => {
+      audio.play(simulation.running ? "toggle_off" : "toggle_on");
       const running = simulation.toggleRunning();
       ui.setRunning(running);
     });
@@ -688,12 +702,14 @@ function toggleMenu(menu) {
   const button = menu.querySelector(".menu-item");
   const isOpen = menu.classList.contains("open");
   if (isOpen) {
+    audio.play("close");
     menu.classList.remove("open");
     if (button) {
       button.setAttribute("aria-expanded", "false");
     }
     activeMenu = null;
   } else {
+    audio.play("open");
     closeMenus();
     menu.classList.add("open");
     if (button) {
@@ -705,7 +721,11 @@ function toggleMenu(menu) {
 
 function closeMenus() {
   if (!menuBar) return;
-  menuBar.querySelectorAll(".menu.open").forEach((menu) => {
+  const openMenus = menuBar.querySelectorAll(".menu.open");
+  if (openMenus.length > 0) {
+      audio.play("close");
+  }
+  openMenus.forEach((menu) => {
     menu.classList.remove("open");
     const button = menu.querySelector(".menu-item");
     if (button) {
@@ -1608,10 +1628,33 @@ function setSelectedUnit(unitId) {
   selectedUnitId = unitId || null;
   renderer.setSelectedUnit(selectedUnitId);
   updateUnitButtons(selectedUnitId);
+  updateToolbarContext(selectedUnitId);
   if (selectedUnitId) {
     highlightPipelinesForUnit(selectedUnitId);
   } else {
     clearPipelineHighlight();
+  }
+}
+
+function updateToolbarContext(unitId) {
+  const contextButtons = mapToolbar.querySelectorAll('button[data-command]');
+  contextButtons.forEach(btn => {
+    const cmd = btn.dataset.command;
+    if (['inspection', 'build-pipe', 'bulldoze'].includes(cmd)) {
+        if (unitId) {
+            btn.removeAttribute('disabled');
+            btn.classList.remove('ghost');
+        } else {
+            btn.setAttribute('disabled', 'true');
+            btn.classList.add('ghost');
+        }
+    }
+  });
+
+  if (unitId) {
+      ui.showHint(`Selected unit: ${unitId}. Try INSPECT or MAINT.`);
+  } else {
+      ui.showHint("Select a unit to see available operations.");
   }
 }
 

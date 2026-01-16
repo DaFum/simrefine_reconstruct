@@ -76,6 +76,7 @@ body {
 
 .menu-item[aria-expanded="true"] {
   background: rgba(12, 22, 38, 0.6);
+  text-shadow: 0 0 5px rgba(217, 233, 255, 0.6);
 }
 
 .menu-action {
@@ -83,13 +84,20 @@ body {
   padding: 4px 12px;
   border: 2px solid rgba(255, 255, 255, 0.25);
   border-radius: 10px;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
 }
 
 .menu-action:hover,
 .menu-action:focus-visible {
   background: rgba(245, 249, 255, 0.12);
   color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.menu-action:active {
+  transform: translateY(1px);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
 }
 
 .menu-title {
@@ -283,6 +291,11 @@ body {
   border-right-color: #707070;
   cursor: pointer;
   text-transform: uppercase;
+  transition: transform 0.05s ease, box-shadow 0.1s ease;
+}
+
+.toolbar-button:hover {
+  filter: brightness(1.05);
 }
 
 .toolbar-button:focus-visible {
@@ -296,6 +309,8 @@ body {
   border-bottom-color: #ffffff;
   border-right-color: #ffffff;
   background: linear-gradient(#bfbfbf, #d5d5d5);
+  transform: translateY(1px);
+  box-shadow: inset 1px 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .toolbar-button.active {
