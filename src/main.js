@@ -41,7 +41,7 @@ sceneContainer.innerHTML = "";
 
 const eventBus = new EventBus();
 const audio = new AudioController();
-const simulation = new RefinerySimulation();
+const simulation = new RefinerySimulation(eventBus);
 const commandSystem = new CommandSystem(simulation, eventBus);
 const ui = new UIController(simulation, audio, commandSystem);
 // Renderer is created later, so we initialize ThemeManager after renderer creation
@@ -265,10 +265,6 @@ eventBus.on("MAINTENANCE_SCHEDULED", ({ unitId }) => {
         ui.selectUnit(unitId);
         renderer.focusOnUnit?.(unitId, { onlyIfVisible: false });
     }
-});
-
-eventBus.on("CONVOY_DISPATCHED", ({ product }) => {
-    // Maybe some visual effect for convoy?
 });
 
 function updateRecordButtonState(active) {
@@ -614,45 +610,6 @@ function animate(now) {
   const delta = (now - clock.last) / 1000;
   clock.last = now;
   simulation.update(delta);
-
-  // Poll for completed inspections
-  if (typeof simulation.getCompletedInspections === "function") {
-      const reports = simulation.getCompletedInspections();
-      reports.forEach(report => {
-          eventBus.emit("INSPECTION_COMPLETED", { unitId: report.unitId, report });
-      });
-  }
-
-  // Track and emit alert changes
-  if (typeof simulation.getActiveAlerts === "function") {
-      const activeAlerts = simulation.getActiveAlerts();
-      const activeIds = new Set();
-
-      activeAlerts.forEach(alert => {
-          // Construct a unique ID for the alert
-          const id = alert.type === 'unit'
-              ? `unit-${alert.unitId}`
-              : `storage-${alert.product}-${alert.severity}`;
-
-          activeIds.add(id);
-
-          if (!previousAlerts.has(id)) {
-              // New alert
-              eventBus.emit("ALERT_RAISED", { ...alert, id });
-          }
-      });
-
-      // Check for cleared alerts
-      previousAlerts.forEach((_, id) => {
-          if (!activeIds.has(id)) {
-              eventBus.emit("ALERT_CLEARED", { id });
-          }
-      });
-
-      // Update cache
-      previousAlerts.clear();
-      activeIds.forEach(id => previousAlerts.set(id, true));
-  }
 
   const recorderState =
     typeof simulation.getRecorderState === "function"

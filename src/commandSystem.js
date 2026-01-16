@@ -35,7 +35,7 @@ export class CommandSystem {
   _handleInspectUnit({ unitId }) {
     const result = this.simulation.performInspection(unitId);
     if (result) {
-      this.eventBus.emit("INSPECTION_STARTED", { unitId });
+      this.eventBus.emit("INSPECTION_STARTED", { unitId, report: result });
     }
   }
 
@@ -53,7 +53,7 @@ export class CommandSystem {
     }
   }
 
-  _handleDispatchConvoy(payload) {
+  _handleDispatchConvoy({}) {
     const result = this.simulation.dispatchLogisticsConvoy();
     if (result?.product) {
       this.eventBus.emit("CONVOY_DISPATCHED", { product: result.product });
