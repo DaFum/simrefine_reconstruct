@@ -1,6 +1,8 @@
 import { RefinerySimulation } from "./simulation.js?v=3";
+import { OfficeGame } from "./game/OfficeGame.js";
 import { UIController } from "./ui.js?v=3";
 import { TileRenderer } from "./renderer3d.js?v=3";
+import { OfficeRenderer } from "./game/OfficeRenderer.js";
 import { AudioController } from "./audio.js";
 import { EventBus } from "./eventBus.js";
 import { CommandSystem } from "./commandSystem.js";
@@ -37,14 +39,20 @@ const flowToggleButton = menuBar?.querySelector('[data-action="view-toggle-flow"
 const calloutShelf = document.getElementById("alert-callouts");
 const mapStatusPanel = document.querySelector(".map-status");
 
-sceneContainer.innerHTML = "";
+// Game Mode Management
+let currentMode = "refinery";
+let activeGame = null;
+let activeRenderer = null;
 
 const eventBus = new EventBus();
 const audio = new AudioController();
-const simulation = new RefinerySimulation(eventBus);
+
+// Initialize Default Mode (Refinery)
+let simulation = new RefinerySimulation(eventBus); // Global reference kept for UI/CommandSystem compat
+activeGame = simulation;
 const commandSystem = new CommandSystem(simulation, eventBus);
 const ui = new UIController(simulation, audio, commandSystem);
-// Renderer is created later, so we initialize ThemeManager after renderer creation
+
 if (typeof ui.setModeBadge === "function") {
   ui.setModeBadge("AUTO");
 }
@@ -195,13 +203,72 @@ const pipelineConfigs = [
   },
 ];
 
-
-const renderer = new TileRenderer(sceneContainer, simulation, unitConfigs, pipelineConfigs);
+// Initialize default renderer
+let renderer = new TileRenderer(sceneContainer, simulation, unitConfigs, pipelineConfigs);
+activeRenderer = renderer;
 new ThemeManager(renderer, eventBus);
-const surface = renderer.getSurface();
+let surface = renderer.getSurface();
 
 // Expose for debugging after all systems are initialized
 window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem };
+window.switchGameMode = setGameMode; // Expose switcher
+
+function setGameMode(mode) {
+    if (mode === currentMode) return;
+
+    // Dispose current
+    if (activeRenderer && typeof activeRenderer.dispose === "function") {
+        // activeRenderer.dispose(); // TileRenderer doesn't have dispose yet, but Office does
+    }
+    if (activeGame && typeof activeGame.dispose === "function") {
+        activeGame.dispose();
+    }
+
+    sceneContainer.innerHTML = ""; // Clear DOM
+
+    if (mode === "office") {
+        activeGame = new OfficeGame(eventBus);
+        activeGame.start();
+        activeRenderer = new OfficeRenderer(sceneContainer, activeGame);
+
+        // Mock simulation reference for UI/CommandSystem
+        // We might want to just hide the main UI and show a game HUD?
+        // For now, let's keep references valid
+        simulation = activeGame;
+        ui.simulation = activeGame;
+        commandSystem.simulation = activeGame;
+
+        // Hide refinery specific UI elements
+        if (mapStatusPanel) mapStatusPanel.style.display = 'none';
+        if (unitPulseList) unitPulseList.parentElement.style.display = 'none';
+
+    } else {
+        // Restore Refinery
+        activeGame = new RefinerySimulation(eventBus);
+        simulation = activeGame;
+        activeRenderer = new TileRenderer(sceneContainer, simulation, unitConfigs, pipelineConfigs);
+        new ThemeManager(activeRenderer, eventBus);
+
+        ui.simulation = activeGame;
+        commandSystem.simulation = activeGame;
+
+        if (mapStatusPanel) mapStatusPanel.style.display = '';
+        if (unitPulseList) unitPulseList.parentElement.style.display = '';
+
+        // Re-apply presets
+        applyPreset("auto");
+    }
+
+    renderer = activeRenderer;
+    surface = renderer.getSurface();
+    currentMode = mode;
+
+    // Re-bind listeners to new surface if needed?
+    // The surface listeners below capture `surface` variable which is now stale.
+    // We need to re-bind or use a stable wrapper.
+    // For this prototype, a reload might be cleaner, but let's try to just warn.
+    console.log("Switched to mode: " + mode);
+}
 
 const unitPulseEntries = new Map();
 const unitModeLabels = new Map();
@@ -617,18 +684,34 @@ const clock = { last: performance.now() };
 function animate(now) {
   const delta = (now - clock.last) / 1000;
   clock.last = now;
-  simulation.update(delta);
+
+  // Use activeGame/activeRenderer if set, else fallback to simulation/renderer vars
+  const game = activeGame || simulation;
+  const rend = activeRenderer || renderer;
+
+  game.update(delta);
 
   const recorderState =
-    typeof simulation.getRecorderState === "function"
-      ? simulation.getRecorderState()
+    typeof game.getRecorderState === "function"
+      ? game.getRecorderState()
       : null;
-  const logisticsState = simulation.getLogisticsState();
-  const flows = simulation.getFlows();
+  const logisticsState = game.getLogisticsState ? game.getLogisticsState() : {};
+  const flows = game.getFlows ? game.getFlows() : {};
   updateRecordButtonState(Boolean(recorderState?.active));
-  renderer.render(delta, { flows, logistics: logisticsState });
-  ui.update(logisticsState, flows);
-  refreshUnitPulse(now / 1000);
+
+  // Render
+  if (currentMode === "office") {
+      rend.render(delta, game.state);
+  } else {
+      rend.render(delta, { flows, logistics: logisticsState });
+  }
+
+  // Update UI (might need to suppress for office mode)
+  if (currentMode === "refinery") {
+      ui.update(logisticsState, flows);
+      refreshUnitPulse(now / 1000);
+  }
+
   requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
@@ -857,6 +940,10 @@ function handleMenuAction(action) {
     case "view-cycle-light":
       renderer.cyclePalette();
       simulation.pushLog("info", "Palette cycled — channeling SimFarm and SimCity swatches.");
+      break;
+    case "switch-game-mode":
+      const newMode = currentMode === "refinery" ? "office" : "refinery";
+      setGameMode(newMode);
       break;
     default:
       break;
