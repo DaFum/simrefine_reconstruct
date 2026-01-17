@@ -1415,6 +1415,10 @@ export class RefinerySimulation {
     return this.units.map((unit) => ({ ...unit }));
   }
 
+  getUnit(id) {
+    return this.unitMap[id];
+  }
+
   getFlows() {
     return { ...this.flows };
   }
