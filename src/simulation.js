@@ -2962,8 +2962,8 @@ export class RefinerySimulation {
 
   getActionToysState() {
       return {
-          convoys: this.activeConvoys.map(c => ({...c})),
-          inspections: this.activeInspections.map(i => ({...i}))
+          convoys: this.activeConvoys,
+          inspections: this.activeInspections
       };
   }
 
