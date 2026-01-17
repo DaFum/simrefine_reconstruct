@@ -56,6 +56,9 @@ const STORAGE_CONFIG = [
   { key: "jet", color: 0x6fd3ff, offset: new THREE.Vector2(2.6, 2) },
 ];
 
+const ALERT_COLOR = new THREE.Color(0xff7e6f);
+const HEAT_COLOR = new THREE.Color(0xffd66f);
+
 export class TileRenderer {
   constructor(container, simulationInstance, unitDefs, pipelineDefs, options = {}) {
     this.container = container;
@@ -88,6 +91,7 @@ export class TileRenderer {
     this.effects = []; // Visual effects (particles, ripples)
     this._vectorA = new THREE.Vector3();
     this._vectorB = new THREE.Vector3();
+    this._tempColor = new THREE.Color();
 
     this.deviceScaleX = 1;
     this.deviceScaleY = 1;
@@ -226,17 +230,16 @@ export class TileRenderer {
       const heat = clamp(utilization, 0, 1);
       const alert = clamp(1 - integrity, 0, 1);
 
-      const baseColor = unit.baseColor.clone().lerp(new THREE.Color(0xff7e6f), alert * 0.65);
-      unit.body.material.color.copy(baseColor);
+      unit.body.material.color.copy(unit.baseColor).lerp(ALERT_COLOR, alert * 0.65);
 
-      const accentColor = unit.accentColor.clone().lerp(new THREE.Color(0xffd66f), heat * 0.45);
+      this._tempColor.copy(unit.accentColor).lerp(HEAT_COLOR, heat * 0.45);
       if (unit.cap) {
-        unit.cap.material.color.copy(accentColor);
+        unit.cap.material.color.copy(this._tempColor);
       }
       if (Array.isArray(unit.accentMeshes)) {
         unit.accentMeshes.forEach((mesh) => {
           if (mesh?.material?.color) {
-            mesh.material.color.copy(accentColor);
+            mesh.material.color.copy(this._tempColor);
           }
         });
       }
