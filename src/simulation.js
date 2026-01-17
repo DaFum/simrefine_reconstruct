@@ -1684,7 +1684,7 @@ export class RefinerySimulation {
       product: chosenProduct,
       dueIn: autoplan ? Math.max(6, resolvedDueIn) : resolvedDueIn,
       volume: cappedVolume,
-      window: resolvedWindow,
+      deliveryWindow: resolvedWindow,
       rush,
       autoplan,
     });
@@ -1783,12 +1783,12 @@ export class RefinerySimulation {
     return clamp((base + slack) * rushFactor, 3.2, 12.5);
   }
 
-  _registerShipment({ product, dueIn, volume, window, rush = false, autoplan = false }) {
+  _registerShipment({ product, dueIn, volume, deliveryWindow, rush = false, autoplan = false }) {
     if (!product || !Number.isFinite(dueIn) || dueIn <= 0) {
       return null;
     }
 
-    const effectiveWindow = typeof window === "number" && Number.isFinite(window) ? window : dueIn;
+    const effectiveWindow = typeof deliveryWindow === "number" && Number.isFinite(deliveryWindow) ? deliveryWindow : dueIn;
 
     const shipment = {
       id: `ship-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
@@ -2690,14 +2690,14 @@ export class RefinerySimulation {
     }
 
     const urgency = clamp((highestRatio - 0.55) / 0.45, 0, 1);
-    const window = Math.max(0.8, randomRange(1.0, 1.6) * (1 - urgency * 0.35));
+    const deliveryWindow = Math.max(0.8, randomRange(1.0, 1.6) * (1 - urgency * 0.35));
     const dueIn = Math.max(0.25, randomRange(0.35, 0.9) * (1 - urgency * 0.3));
     const volume = Math.min(level, capacity * clamp(0.12 + urgency * 0.24, 0.12, 0.34));
 
     const shipment = this._registerShipment({
       product: targetProduct,
       volume,
-      window,
+      deliveryWindow,
       dueIn,
       rush: true,
       autoplan: false,
