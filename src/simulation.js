@@ -531,6 +531,9 @@ export class RefinerySimulation {
     this.storagePressure = { active: false, throttle: 1, timer: 0, lastRatio: 0 };
     this.extraShipmentCooldown = 0;
     this.storageUpgrades = { level: 0 };
+    this.activeConvoys = [];
+    this.activeInspections = [];
+    this.completedInspections = [];
     this.activeMission = null;
     this.missionHistory = [];
     this.startMission("tutorial_stabilize");
@@ -3138,8 +3141,8 @@ export class RefinerySimulation {
 
   getMissionState() {
     return {
-      active: this.activeMission ? { ...this.activeMission } : null,
-      history: [...this.missionHistory]
+      active: this.activeMission ? structuredClone(this.activeMission) : null,
+      history: structuredClone(this.missionHistory)
     };
   }
 
