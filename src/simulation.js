@@ -906,7 +906,7 @@ export class RefinerySimulation {
     const operatingExpense = maintenanceBudget + safetyBudget + envBudget;
 
     const incidentsRisk = this._updateReliability(
-      { distillation, reformer, fcc, hydrocracker, alkylation, sulfur },
+      this.unitMap,
       {
         hours,
         scenario,
