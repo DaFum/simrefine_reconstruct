@@ -133,6 +133,8 @@ export class RefinerySimulation {
     // Mission System
     this.activeMission = null;
     this.missionHistory = [];
+    this.directives = [];
+    this.directiveStats = { total: 0, completed: 0, failed: 0 };
     this.startMission("tutorial_stabilize");
 
     this.shipmentHorizonHours = SHIPMENT_HORIZON_HOURS;
@@ -1786,11 +1788,13 @@ export class RefinerySimulation {
       return null;
     }
 
+    const effectiveWindow = typeof window === "number" && Number.isFinite(window) ? window : dueIn;
+
     const shipment = {
       id: `ship-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
       product,
       volume: Math.round(Math.max(10, volume || 0)),
-      window,
+      window: effectiveWindow,
       dueIn,
       status: "pending",
       createdAt: this.timeMinutes,
@@ -1805,7 +1809,7 @@ export class RefinerySimulation {
       const label = PRODUCT_LABELS[product] || product;
       this.pushLog(
         "info",
-        `${shipment.volume.toFixed(0)} kb of ${label} slated for the dock within ${window.toFixed(1)} h.`,
+        `${shipment.volume.toFixed(0)} kb of ${label} slated for the dock within ${effectiveWindow.toFixed(1)} h.`,
         { product }
       );
     }
