@@ -216,11 +216,10 @@ export class TileRenderer {
     this.cameraTarget.z = damp(this.cameraTarget.z, this.desiredCameraTarget.z, smoothing, deltaSeconds);
     this._updateCamera();
 
-    const unitState = new Map((this.simulation?.getUnits?.() || []).map((entry) => [entry.id, entry]));
     const palette = this._getPalette();
 
     for (const [unitId, unit] of this.unitMeshes.entries()) {
-      const metrics = unitState.get(unitId);
+      const metrics = this.simulation?.getUnit?.(unitId);
       const utilization = metrics ? clamp(metrics.utilization || 0, 0, 1.5) : 0;
       const integrity = metrics ? clamp(metrics.integrity || 0, 0, 1) : 1;
 
