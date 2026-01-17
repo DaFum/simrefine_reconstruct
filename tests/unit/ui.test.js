@@ -189,11 +189,7 @@ describe('UIController', () => {
   describe('Updates', () => {
     it('should render metrics correctly', () => {
       ui.update();
-      // Values are animated, so we check if they are set (animation might take frames)
-      // Since requestAnimationFrame is mocked in jsdom environment usually or runs immediately?
-      // Vitest jsdom uses raf-stub or similar?
-      // Actually we mocked requestAnimationFrame implicitly or it runs?
-      // Let's just check if update called getMetrics
+      // Metrics values are animated in the UI, so this test only verifies that metrics are requested from the simulation.
       expect(mockSimulation.getMetrics).toHaveBeenCalled();
     });
 

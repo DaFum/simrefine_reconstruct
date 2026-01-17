@@ -122,8 +122,7 @@ describe('RefinerySimulation', () => {
               simulation.update(0.1);
           }
           const metrics = simulation.getMetrics();
-          // Might not have updated metrics because metrics are daily averages or instantaneous?
-          // The metrics like 'gasoline' are per day rates calculated each tick.
+          // Ensure we have advanced enough simulated time for gasoline production to register in metrics.
           expect(metrics.gasoline).toBeGreaterThan(0);
       });
   });
@@ -226,9 +225,20 @@ describe('RefinerySimulation', () => {
 
       it('should track objective progress', () => {
           const mission = simulation.activeMission;
-          // Assume tutorial mission has objectives.
-          // Let's verify structure
-          expect(mission.objectives).toBeDefined();
+
+          // Tutorial mission should expose at least one structured objective
+          expect(mission).toBeDefined();
+          expect(Array.isArray(mission.objectives)).toBe(true);
+          expect(mission.objectives.length).toBeGreaterThan(0);
+
+          const firstObjective = mission.objectives[0];
+          expect(firstObjective).toEqual(
+            expect.objectContaining({
+              id: expect.any(String),
+              description: expect.any(String),
+              completed: expect.any(Boolean)
+            })
+          );
       });
   });
 

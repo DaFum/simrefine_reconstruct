@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 // Move mock definition inside vi.mock factory to avoid hoisting issues
 vi.mock('../../vendor/three.module.js', () => {
-  const mockFn = (impl) => vi.fn(impl);
 
   class MockVector3 {
     constructor(x, y, z) { this.x = x || 0; this.y = y || 0; this.z = z || 0; }
     copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; }
+    sub(v) { this.x -= v.x; this.y -= v.y; this.z -= v.z; return this; }
     sub(v) { this.x -= v.x; this.y -= v.y; this.z -= v.z; return this; }
     add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
     multiplyScalar(s) { this.x *= s; this.y *= s; this.z *= s; return this; }
@@ -31,7 +31,9 @@ vi.mock('../../vendor/three.module.js', () => {
   }
 
   class MockColor {
-    constructor(hex) { }
+    constructor(hex) {
+      this._hex = hex;
+    }
     set() {}
     setHex() {}
     copy() { return this; }
@@ -170,7 +172,6 @@ vi.mock('../../vendor/three.module.js', () => {
     BufferGeometry: class { setAttribute() {} },
     Float32BufferAttribute: class {},
     LineSegments: class { constructor() { this.position = {}; } },
-    LineBasicMaterial: class { constructor() { this.color = new MockColor(); this.userData = {}; } },
     DoubleSide: 2,
     SRGBColorSpace: 'srgb',
     sRGBEncoding: 3001,
@@ -180,9 +181,7 @@ vi.mock('../../vendor/three.module.js', () => {
   };
 });
 
-import * as THREE from '../../vendor/three.module.js';
 import { TileRenderer } from '../../src/renderer3d.js';
-
 describe('TileRenderer', () => {
   let container;
   let simulation;
