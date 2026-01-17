@@ -1750,7 +1750,7 @@ export class TileRenderer {
       this._stepShip(ship, deltaSeconds, shipment);
     });
 
-    for (const [id, ship] of [...this.shipMeshes.entries()]) {
+    for (const [id, ship] of this.shipMeshes) {
       if (!activeIds.has(id)) {
         this._retireShip(ship, deltaSeconds);
       }
