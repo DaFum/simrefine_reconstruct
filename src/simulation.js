@@ -133,6 +133,8 @@ export class RefinerySimulation {
     // Mission System
     this.activeMission = null;
     this.missionHistory = [];
+    this.directives = [];
+    this.directiveStats = { total: 0, completed: 0, failed: 0 };
     this.startMission("tutorial_stabilize");
 
     this.shipmentHorizonHours = SHIPMENT_HORIZON_HOURS;
@@ -1682,7 +1684,7 @@ export class RefinerySimulation {
       product: chosenProduct,
       dueIn: autoplan ? Math.max(6, resolvedDueIn) : resolvedDueIn,
       volume: cappedVolume,
-      window: resolvedWindow,
+      deliveryWindow: resolvedWindow,
       rush,
       autoplan,
     });
@@ -1781,16 +1783,18 @@ export class RefinerySimulation {
     return clamp((base + slack) * rushFactor, 3.2, 12.5);
   }
 
-  _registerShipment({ product, dueIn, volume, window, rush = false, autoplan = false }) {
+  _registerShipment({ product, dueIn, volume, deliveryWindow, rush = false, autoplan = false }) {
     if (!product || !Number.isFinite(dueIn) || dueIn <= 0) {
       return null;
     }
+
+    const effectiveWindow = typeof deliveryWindow === "number" && Number.isFinite(deliveryWindow) ? deliveryWindow : dueIn;
 
     const shipment = {
       id: `ship-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
       product,
       volume: Math.round(Math.max(10, volume || 0)),
-      window,
+      window: effectiveWindow,
       dueIn,
       status: "pending",
       createdAt: this.timeMinutes,
@@ -1805,7 +1809,7 @@ export class RefinerySimulation {
       const label = PRODUCT_LABELS[product] || product;
       this.pushLog(
         "info",
-        `${shipment.volume.toFixed(0)} kb of ${label} slated for the dock within ${window.toFixed(1)} h.`,
+        `${shipment.volume.toFixed(0)} kb of ${label} slated for the dock within ${effectiveWindow.toFixed(1)} h.`,
         { product }
       );
     }
@@ -2686,14 +2690,14 @@ export class RefinerySimulation {
     }
 
     const urgency = clamp((highestRatio - 0.55) / 0.45, 0, 1);
-    const window = Math.max(0.8, randomRange(1.0, 1.6) * (1 - urgency * 0.35));
+    const deliveryWindow = Math.max(0.8, randomRange(1.0, 1.6) * (1 - urgency * 0.35));
     const dueIn = Math.max(0.25, randomRange(0.35, 0.9) * (1 - urgency * 0.3));
     const volume = Math.min(level, capacity * clamp(0.12 + urgency * 0.24, 0.12, 0.34));
 
     const shipment = this._registerShipment({
       product: targetProduct,
       volume,
-      window,
+      deliveryWindow,
       dueIn,
       rush: true,
       autoplan: false,
