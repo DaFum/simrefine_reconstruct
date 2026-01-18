@@ -39,6 +39,10 @@ vi.mock('../../vendor/three.module.js', () => {
     clone() { return new MockColor(); }
     multiplyScalar() { return this; }
     getHex() { return 0xffffff; }
+    equals(other) {
+      if (!(other instanceof MockColor)) return false;
+      return this.getHex() === other.getHex();
+    }
   }
 
   class MockScene {

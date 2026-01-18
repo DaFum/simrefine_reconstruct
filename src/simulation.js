@@ -1406,6 +1406,16 @@ export class RefinerySimulation {
   }
 
   getPerformanceHistory() {
+    if (this._perfBuffer) {
+        const bufferLen = this._perfBuffer.length;
+        const result = new Array(this._perfCount);
+        let ptr = (this._perfHead - this._perfCount + bufferLen) % bufferLen;
+        for (let i = 0; i < this._perfCount; i++) {
+            result[i] = this._perfBuffer[ptr];
+            ptr = (ptr + 1) % bufferLen;
+        }
+        return result;
+    }
     return [...this.performanceHistory];
   }
 
@@ -1499,6 +1509,27 @@ export class RefinerySimulation {
   }
 
   _recordPerformance(score) {
+    if (!this._perfBuffer) {
+      this._perfBuffer = new Float32Array(240);
+      this._perfHead = 0;
+      this._perfCount = 0;
+      // Hydrate from existing history if any (during migration/hot reload)
+      this.performanceHistory.forEach(val => {
+        this._perfBuffer[this._perfHead] = val;
+        this._perfHead = (this._perfHead + 1) % 240;
+        if (this._perfCount < 240) this._perfCount++;
+      });
+      // Keep legacy array; it will be maintained alongside the ring buffer
+    }
+
+    this._perfBuffer[this._perfHead] = score;
+    this._perfHead = (this._perfHead + 1) % 240;
+    if (this._perfCount < 240) this._perfCount++;
+
+    // Maintain performanceHistory as a synchronized sliding window (for legacy callers)
+    if (!this.performanceHistory) {
+      this.performanceHistory = [];
+    }
     this.performanceHistory.push(score);
     if (this.performanceHistory.length > 240) {
       this.performanceHistory.shift();
@@ -2018,7 +2049,11 @@ export class RefinerySimulation {
       });
     }
 
-    this.shipments.forEach((shipment) => {
+    const activeShipments = [];
+    let nextShipmentIn = Infinity;
+    let pendingCount = 0;
+
+    for (const shipment of this.shipments) {
       if (shipment.status === "pending") {
         shipment.dueIn -= hours;
         if (shipment.dueIn <= 0) {
@@ -2027,15 +2062,22 @@ export class RefinerySimulation {
       } else {
         shipment.cooldown = Math.max(0, shipment.cooldown - hours);
       }
-    });
 
-    this.shipments = this.shipments.filter(
-      (shipment) => shipment.status === "pending" || shipment.cooldown > 0
-    );
+      if (shipment.status === "pending" || shipment.cooldown > 0) {
+        activeShipments.push(shipment);
+        if (shipment.status === "pending") {
+          pendingCount++;
+          if (shipment.dueIn < nextShipmentIn) {
+            nextShipmentIn = shipment.dueIn;
+          }
+        }
+      }
+    }
 
-    this._updateNextShipmentCountdown();
+    this.shipments = activeShipments;
+    this.nextShipmentIn = nextShipmentIn === Infinity ? null : Math.max(0, nextShipmentIn);
 
-    if (this._countPendingShipments() < 8) {
+    if (pendingCount < 8) {
       this._ensureScheduledShipments();
     }
 

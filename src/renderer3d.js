@@ -58,6 +58,7 @@ const STORAGE_CONFIG = [
 
 const ALERT_COLOR = new THREE.Color(0xff7e6f);
 const HEAT_COLOR = new THREE.Color(0xffd66f);
+const COLOR_WHITE = new THREE.Color(0xffffff);
 
 export class TileRenderer {
   constructor(container, simulationInstance, unitDefs, pipelineDefs, options = {}) {
@@ -92,6 +93,7 @@ export class TileRenderer {
     this._vectorA = new THREE.Vector3();
     this._vectorB = new THREE.Vector3();
     this._tempColor = new THREE.Color();
+    this._tempColor2 = new THREE.Color();
 
     this.deviceScaleX = 1;
     this.deviceScaleY = 1;
@@ -247,15 +249,18 @@ export class TileRenderer {
       const indicatorIntensity = 0.15 + heat * 0.75;
       unit.indicator.scale.y = 0.2 + heat * 0.9;
       unit.indicator.material.opacity = clamp(indicatorIntensity, 0.12, 0.9);
-      const utilColor = lerpColor(new THREE.Color(palette.flowLow), new THREE.Color(palette.flowHigh), clamp(utilization, 0, 1));
-      unit.indicator.material.color.copy(utilColor);
+
+      this._tempColor2.set(palette.flowLow);
+      this._tempColor.set(palette.flowHigh);
+      this._tempColor2.lerp(this._tempColor, clamp(utilization, 0, 1));
+      unit.indicator.material.color.copy(this._tempColor2);
 
       const highlightActive = this.selectedUnitId === unitId;
       const hoverActive = this.hoverUnitId === unitId && !highlightActive;
       const pulse = highlightActive ? 0.5 + Math.sin(this.selectionPulse * 3) * 0.25 : 0;
       const baseOpacity = highlightActive ? 0.45 + pulse * 0.4 : hoverActive ? 0.28 : 0.12;
       unit.highlight.material.opacity = baseOpacity;
-      unit.highlight.material.color.setHex(palette.highlight);
+      unit.highlight.material.color.set(palette.highlight);
       unit.highlight.visible = baseOpacity > 0.08;
       const scaleBoost = highlightActive ? 1.12 + pulse * 0.1 : hoverActive ? 1.05 : 1.0;
       unit.highlight.scale.set(scaleBoost, 1, scaleBoost);
@@ -300,8 +305,8 @@ export class TileRenderer {
         const indicatorScale = clamp(ratio, 0.02, 1);
         tank.indicator.scale.y = indicatorScale;
         tank.indicator.material.opacity = 0.52 + ratio * 0.38;
-        const gaugeColor = (tank.baseColor || new THREE.Color(0xffffff)).clone();
-        gaugeColor.lerp(new THREE.Color(0xffffff), ratio * 0.25);
+        const gaugeColor = this._tempColor.copy(tank.baseColor || COLOR_WHITE);
+        gaugeColor.lerp(COLOR_WHITE, ratio * 0.25);
         tank.indicator.material.color.copy(gaugeColor);
         tank.indicator.visible = true;
         tank.indicator.position.y = 0;
@@ -309,7 +314,7 @@ export class TileRenderer {
 
       if (tank.shell?.material) {
         const baseColor = tank.shell.material.userData?.baseColor || tank.shell.material.color;
-        tank.shell.material.color.copy(baseColor).lerp(new THREE.Color(0xffffff), ratio * 0.1);
+        tank.shell.material.color.copy(baseColor).lerp(COLOR_WHITE, ratio * 0.1);
         tank.shell.material.emissiveIntensity = 0.08 + ratio * 0.3;
       }
 
@@ -318,14 +323,14 @@ export class TileRenderer {
       }
 
       if (Array.isArray(tank.gaugeTickMaterials)) {
-        const tickBaseColor = (tank.baseColor || new THREE.Color(0xffffff)).clone();
+        const tickBaseColor = this._tempColor.copy(tank.baseColor || COLOR_WHITE);
         tank.gaugeTickMaterials.forEach((material, index) => {
           if (!material || !material.color) {
             return;
           }
           const emphasis = ratio >= index / Math.max(tank.gaugeTickMaterials.length - 1, 1) ? 0.35 : 0.0;
-          const tint = tickBaseColor.clone().lerp(new THREE.Color(0xffffff), 0.65 + emphasis);
-          material.color.copy(tint);
+          this._tempColor2.copy(tickBaseColor).lerp(COLOR_WHITE, 0.65 + emphasis);
+          material.color.copy(this._tempColor2);
           material.opacity = 0.22 + emphasis * 0.9;
         });
       }
@@ -689,31 +694,16 @@ export class TileRenderer {
               }
           });
 
-          // Restore defaults for non-boosted pipes handled here if needed?
-          // Actually the main render loop updates `emissiveIntensity` based on flow ratio and highlight.
-          // But `pipe.glow.material.color` and high opacity set above persist.
-          // We need to reset pipes that are NOT in activeBoosts but might have been boosted before?
-          // Or just iterate all pipes and reset if not boosted?
-          // Simpler: iterate all pipes, check if boosted.
-
+          // Restore defaults for non-boosted pipes
           this.pipelineMeshes.forEach((pipe, key) => {
               if (!activeBoosts.has(key)) {
-                  // Revert to standard glow behavior (handled in render loop mostly, but color needs reset)
-                  // The render loop sets opacity based on flow, but we overrode it above.
-                  // And we changed color.
-                  // We need to restore the color to what `_applyPalette` or base color sets.
-                  // The render loop calculates `glow.material.emissiveIntensity` but not color.
-                  // Wait, render loop does:
-                  // pipeline.glow.material.emissiveIntensity = this.flowVisible ? baseIntensity * 0.6 + dynamicIntensity * 0.9 : 0.0;
-                  // But we set `pipe.glow.material.opacity` above, which might be different from emissiveIntensity?
-                  // The material is transparent, so opacity matters.
-                  // The render loop does NOT touch opacity for glow, only emissiveIntensity.
-                  // Actually `glowMaterial` has `opacity: 0.45` initially.
-
-                  pipe.glow.material.opacity = 0.45;
-                  // Revert color to baseColor mixed with white as in _createPipelines or _applyPalette
-                  // We can re-derive it:
-                  pipe.glow.material.color.copy(pipe.baseColor.clone().lerp(new THREE.Color(0xffffff), 0.35));
+                  if (pipe.glow.material.opacity !== 0.45) {
+                      pipe.glow.material.opacity = 0.45;
+                  }
+                  this._tempColor.copy(pipe.baseColor).lerp(COLOR_WHITE, 0.35);
+                  if (!pipe.glow.material.color.equals(this._tempColor)) {
+                      pipe.glow.material.color.copy(this._tempColor);
+                  }
               }
           });
       }
@@ -1978,12 +1968,16 @@ export class TileRenderer {
     ship.progress += (ship.targetProgress - ship.progress) * Math.min(1, deltaSeconds * 2.4);
     ship.progress = clamp(ship.progress, 0, 2.2);
 
-    const colorTarget =
-      status === "missed"
-        ? new THREE.Color(0xb34b4b)
-        : status === "completed"
-        ? ship.baseColor.clone().lerp(new THREE.Color(0xffffff), 0.15)
-        : ship.baseColor;
+    let colorTarget;
+    if (status === "missed") {
+        this._tempColor2.set(0xb34b4b);
+        colorTarget = this._tempColor2;
+    } else if (status === "completed") {
+        this._tempColor2.copy(ship.baseColor).lerp(COLOR_WHITE, 0.15);
+        colorTarget = this._tempColor2;
+    } else {
+        colorTarget = ship.baseColor;
+    }
     ship.hull.material.color.lerp(colorTarget, clamp(deltaSeconds * 2.5, 0, 1));
     ship.light.intensity = status === "missed" ? 0.3 : status === "pending" ? 0.5 : 0.38;
 
@@ -2006,21 +2000,20 @@ export class TileRenderer {
     const depart = this.shipLane.depart;
 
     const clampedProgress = Math.max(0, progress);
-    let position;
     let direction;
     if (clampedProgress <= 1) {
       const t = easeInOut(clamp(clampedProgress, 0, 1));
-      position = approach.clone().lerp(dock, t);
+      this._vectorA.lerpVectors(approach, dock, t);
       direction = this.shipLane.dockDirection;
     } else {
       const leaveProgress = clamp(clampedProgress - 1, 0, 1);
       const t = easeInOut(leaveProgress);
-      position = dock.clone().lerp(depart, t);
+      this._vectorA.lerpVectors(dock, depart, t);
       direction = this.shipLane.departDirection;
     }
 
-    ship.group.position.x = position.x;
-    ship.group.position.z = position.z;
+    ship.group.position.x = this._vectorA.x;
+    ship.group.position.z = this._vectorA.z;
     ship.group.position.y = (this.shipLane.surfaceY ?? 0.04) + bob;
     const yaw = Math.atan2(direction.x, direction.z);
     ship.group.rotation.y = yaw;
@@ -2206,10 +2199,11 @@ export class TileRenderer {
   }
 }
 
-function lerpColor(a, b, t) {
+function lerpColor(a, b, t, target) {
+  const result = target || new THREE.Color();
   const colorA = a instanceof THREE.Color ? a : new THREE.Color(a);
   const colorB = b instanceof THREE.Color ? b : new THREE.Color(b);
-  return colorA.clone().lerp(colorB, clamp(t, 0, 1));
+  return result.copy(colorA).lerp(colorB, clamp(t, 0, 1));
 }
 
 function createLabelSprite(text, fill = 0xf0f6ff) {
