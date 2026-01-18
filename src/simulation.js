@@ -1406,6 +1406,15 @@ export class RefinerySimulation {
   }
 
   getPerformanceHistory() {
+    if (this._perfBuffer) {
+        const result = new Array(this._perfCount);
+        let ptr = (this._perfHead - this._perfCount + 240) % 240;
+        for (let i = 0; i < this._perfCount; i++) {
+            result[i] = this._perfBuffer[ptr];
+            ptr = (ptr + 1) % 240;
+        }
+        return result;
+    }
     return [...this.performanceHistory];
   }
 
@@ -1499,10 +1508,23 @@ export class RefinerySimulation {
   }
 
   _recordPerformance(score) {
-    this.performanceHistory.push(score);
-    if (this.performanceHistory.length > 240) {
-      this.performanceHistory.shift();
+    if (!this._perfBuffer) {
+        this._perfBuffer = new Float32Array(240);
+        this._perfHead = 0;
+        this._perfCount = 0;
+        // Hydrate from existing history if any (during migration/hot reload)
+        this.performanceHistory.forEach(val => {
+            this._perfBuffer[this._perfHead] = val;
+            this._perfHead = (this._perfHead + 1) % 240;
+            if (this._perfCount < 240) this._perfCount++;
+        });
+        // Clear legacy array to free memory
+        this.performanceHistory = [];
     }
+
+    this._perfBuffer[this._perfHead] = score;
+    this._perfHead = (this._perfHead + 1) % 240;
+    if (this._perfCount < 240) this._perfCount++;
   }
 
   _scoreToGrade(score) {
