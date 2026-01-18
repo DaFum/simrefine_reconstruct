@@ -2040,7 +2040,11 @@ export class RefinerySimulation {
       });
     }
 
-    this.shipments.forEach((shipment) => {
+    const activeShipments = [];
+    let nextShipmentIn = Infinity;
+    let pendingCount = 0;
+
+    for (const shipment of this.shipments) {
       if (shipment.status === "pending") {
         shipment.dueIn -= hours;
         if (shipment.dueIn <= 0) {
@@ -2049,15 +2053,22 @@ export class RefinerySimulation {
       } else {
         shipment.cooldown = Math.max(0, shipment.cooldown - hours);
       }
-    });
 
-    this.shipments = this.shipments.filter(
-      (shipment) => shipment.status === "pending" || shipment.cooldown > 0
-    );
+      if (shipment.status === "pending" || shipment.cooldown > 0) {
+        activeShipments.push(shipment);
+        if (shipment.status === "pending") {
+          pendingCount++;
+          if (shipment.dueIn < nextShipmentIn) {
+            nextShipmentIn = shipment.dueIn;
+          }
+        }
+      }
+    }
 
-    this._updateNextShipmentCountdown();
+    this.shipments = activeShipments;
+    this.nextShipmentIn = nextShipmentIn === Infinity ? 0 : Math.max(0, nextShipmentIn);
 
-    if (this._countPendingShipments() < 8) {
+    if (pendingCount < 8) {
       this._ensureScheduledShipments();
     }
 

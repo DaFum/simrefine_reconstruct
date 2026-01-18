@@ -1036,7 +1036,7 @@ function exportSnapshot() {
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const timestamp = new Date().toISOString().replace(new RegExp("[:.]", "g"), "-");
   anchor.href = url;
   anchor.download = `simrefinery-${timestamp}.json`;
   document.body.appendChild(anchor);
@@ -1552,7 +1552,7 @@ function formatModeLabel(key) {
     return unitModeLabels.get(key);
   }
   return key
-    .split(/\s|_/)
+    .split(new RegExp("\\s|_"))
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
 }
