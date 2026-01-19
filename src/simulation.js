@@ -1,4 +1,6 @@
 import { MISSIONS } from "./content/missions.js";
+import { MarketSystem } from "./systems/MarketSystem.js";
+import { LogisticsSystem } from "./systems/LogisticsSystem.js";
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const randomRange = (min, max) => min + Math.random() * (max - min);
@@ -100,9 +102,7 @@ export class RefinerySimulation {
       missionCompleted: false,
     };
 
-    this.marketStress = 0.16;
     this.pendingOperationalCost = 0;
-    this.logisticsRushCooldown = 0;
     this.pipelineBoosts = {};
 
     this.flows = {
@@ -114,19 +114,25 @@ export class RefinerySimulation {
     };
 
     this.performanceHistory = [];
-    this.market = this._initMarketState();
 
-    this.storage = this._initStorage();
-    this.storageBaseCapacity = { ...this.storage.capacity };
-    this.storageAlertCache = this._createStorageAlertCache();
-    this.shipments = [];
-    this.shipmentStats = { total: 0, onTime: 0, missed: 0 };
-    this.nextShipmentIn = 0;
-    this.storagePressure = { active: false, throttle: 1, timer: 0, lastRatio: 0 };
-    this.extraShipmentCooldown = 0;
-    this.storageUpgrades = { level: 0 };
+    // Initialize Systems
+    this.marketSystem = new MarketSystem();
+    this.market = this.marketSystem.state; // Legacy reference
 
-    this.activeConvoys = [];
+    this.logisticsSystem = new LogisticsSystem(this);
+    this.storage = this.logisticsSystem.storage; // Legacy reference
+
+    // Alias logistics state for legacy access
+    this.shipments = this.logisticsSystem.shipments;
+    this.shipmentStats = this.logisticsSystem.shipmentStats;
+    this.storagePressure = this.logisticsSystem.storagePressure;
+    this.storageUpgrades = this.logisticsSystem.storageUpgrades;
+    this.activeConvoys = this.logisticsSystem.activeConvoys;
+    this.nextShipmentIn = this.logisticsSystem.nextShipmentIn;
+    this.logisticsRushCooldown = this.logisticsSystem.logisticsRushCooldown;
+    this.extraShipmentCooldown = this.logisticsSystem.extraShipmentCooldown;
+
+    // Unit-based inspections remain here
     this.activeInspections = [];
     this.completedInspections = [];
 
@@ -150,14 +156,45 @@ export class RefinerySimulation {
     );
 
     this._environmentPenaltyCooldown = 0;
-    this._lastShipmentScheduled = { gasoline: -Infinity, diesel: -Infinity, jet: -Infinity };
 
-    this._ensureScheduledShipments(this.shipmentHorizonHours);
-    this._updateNextShipmentCountdown();
+    // Trigger initial schedule in logistics system
+    this.logisticsSystem._ensureScheduledShipments();
+    this.logisticsSystem._updateNextShipmentCountdown();
 
     this.recorder = this._createRecorderState();
     this.lastRecordingSummary = null;
   }
+
+  // Getters to proxy system state to legacy properties
+  get marketStress() { return this.marketSystem.marketStress; }
+  set marketStress(val) { this.marketSystem.marketStress = val; }
+
+  get shipments() { return this.logisticsSystem.shipments; }
+  set shipments(val) { this.logisticsSystem.shipments = val; }
+
+  get storage() { return this.logisticsSystem.storage; }
+  set storage(val) { this.logisticsSystem.storage = val; }
+
+  get nextShipmentIn() { return this.logisticsSystem.nextShipmentIn; }
+  set nextShipmentIn(val) { this.logisticsSystem.nextShipmentIn = val; }
+
+  get logisticsRushCooldown() { return this.logisticsSystem.logisticsRushCooldown; }
+  set logisticsRushCooldown(val) { this.logisticsSystem.logisticsRushCooldown = val; }
+
+  get extraShipmentCooldown() { return this.logisticsSystem.extraShipmentCooldown; }
+  set extraShipmentCooldown(val) { this.logisticsSystem.extraShipmentCooldown = val; }
+
+  get activeConvoys() { return this.logisticsSystem.activeConvoys; }
+  set activeConvoys(val) { this.logisticsSystem.activeConvoys = val; }
+
+  get shipmentStats() { return this.logisticsSystem.shipmentStats; }
+  set shipmentStats(val) { this.logisticsSystem.shipmentStats = val; }
+
+  get storagePressure() { return this.logisticsSystem.storagePressure; }
+  set storagePressure(val) { this.logisticsSystem.storagePressure = val; }
+
+  get storageUpgrades() { return this.logisticsSystem.storageUpgrades; }
+  set storageUpgrades(val) { this.logisticsSystem.storageUpgrades = val; }
 
   _createScenarios() {
     return {
@@ -250,34 +287,6 @@ export class RefinerySimulation {
         maintenancePenalty: 0.42,
         environmentPressure: 0.42,
       },
-    };
-  }
-
-  _initMarketState() {
-    const baseFutures = {
-      gasoline: 112,
-      diesel: 96,
-      jet: 108,
-    };
-    const productionCost = {
-      gasoline: 78,
-      diesel: 74,
-      jet: 81,
-    };
-    return {
-      futures: { ...baseFutures },
-      productionCost: { ...productionCost },
-      basis: {
-        gasoline: baseFutures.gasoline - productionCost.gasoline,
-        diesel: baseFutures.diesel - productionCost.diesel,
-        jet: baseFutures.jet - productionCost.jet,
-      },
-      drift: {
-        gasoline: 0,
-        diesel: 0,
-        jet: 0,
-      },
-      updatedAt: this.timeMinutes || 0,
     };
   }
 
@@ -520,20 +529,15 @@ export class RefinerySimulation {
       toAlkylation: 0,
       toExport: 0,
     };
-    this.marketStress = 0.16;
+
     this.pendingOperationalCost = 0;
-    this.logisticsRushCooldown = 0;
     this.pipelineBoosts = {};
-    this.storage = this._initStorage();
-    this.storageBaseCapacity = { ...this.storage.capacity };
-    this.storageAlertCache = this._createStorageAlertCache();
-    this.shipments = [];
-    this.shipmentStats = { total: 0, onTime: 0, missed: 0 };
-    this.nextShipmentIn = 0;
-    this.storagePressure = { active: false, throttle: 1, timer: 0, lastRatio: 0 };
-    this.extraShipmentCooldown = 0;
-    this.storageUpgrades = { level: 0 };
-    this.activeConvoys = [];
+
+    // Reset systems
+    this.marketSystem.reset();
+    this.market = this.marketSystem.state;
+    this.logisticsSystem.reset();
+
     this.activeInspections = [];
     this.completedInspections = [];
     this.activeMission = null;
@@ -559,12 +563,8 @@ export class RefinerySimulation {
       unit.lastIncident = null;
     });
     this.performanceHistory = [];
-    this.market = this._initMarketState();
     this.logs = [];
     this._environmentPenaltyCooldown = 0;
-    this._lastShipmentScheduled = { gasoline: -Infinity, diesel: -Infinity, jet: -Infinity };
-    this._ensureScheduledShipments(this.shipmentHorizonHours);
-    this._updateNextShipmentCountdown();
     this.recorder = this._createRecorderState();
     this.lastRecordingSummary = null;
     this.pushLog(
@@ -590,14 +590,8 @@ export class RefinerySimulation {
   }
 
   getMarketState() {
-    if (!this.market) {
-      this.market = this._initMarketState();
-    }
-    return {
-      futures: { ...this.market.futures },
-      productionCost: { ...this.market.productionCost },
-      basis: { ...this.market.basis },
-    };
+    // Legacy support
+    return this.marketSystem.getState();
   }
 
   update(deltaSeconds) {
@@ -627,8 +621,6 @@ export class RefinerySimulation {
     this.timeMinutes += deltaMinutes;
     const hours = deltaMinutes / 60;
 
-    this.logisticsRushCooldown = Math.max(0, this.logisticsRushCooldown - hours);
-    this.extraShipmentCooldown = Math.max(0, (this.extraShipmentCooldown || 0) - hours);
     this._prunePipelineBoosts();
     const extraOperationalCost = this._consumeOperationalCost();
 
@@ -654,6 +646,7 @@ export class RefinerySimulation {
       this._updateUnitMode(distillation);
     }
 
+    // Product Production Logic (remains in main class as it touches all units)
     const focus = clamp(this.params.productFocus, 0, 1);
     const centered = focus - 0.5;
 
@@ -893,7 +886,7 @@ export class RefinerySimulation {
     const jetPrice = basePrices.jet * priceModifier * (1 + demandJetBias * 0.35);
     const lpgPrice = basePrices.lpg * priceModifier * (1 + demandGasolineBias * 0.1);
 
-    const crudeCostPerBbl = this._resolveCrudeCostPerBarrel(scenario);
+    const crudeCostPerBbl = this.marketSystem.resolveCrudeCostPerBarrel(scenario);
     const maintenanceBudget =
       2.2 * this.units.length * (0.5 + this.params.maintenance * 1.4 + scenario.maintenancePenalty);
     const safetyBudget = 1.1 * this.params.safety * this.units.length;
@@ -920,11 +913,12 @@ export class RefinerySimulation {
       }
     );
 
-    const logisticsReport = this._updateLogistics({
-      hours,
-      production: result,
-      prices: { gasoline: gasolinePrice, diesel: dieselPrice, jet: jetPrice },
-      scenario,
+    // Update Logistics System
+    const logisticsReport = this.logisticsSystem.update(deltaMinutes, {
+        hours,
+        production: result,
+        prices: { gasoline: gasolinePrice, diesel: dieselPrice, jet: jetPrice },
+        scenario
     });
 
     const environmentLevel = clamp(this.params.environment ?? 0.35, 0, 1);
@@ -966,37 +960,104 @@ export class RefinerySimulation {
     }
 
     let penalty = incidentsRisk.incidentPenalty + logisticsReport.penalty + environmentPenalty;
-    const fixedOverhead = this._calculateFixedOverhead({
+    const fixedOverhead = this.marketSystem.calculateFixedOverhead({
       crudeThroughput: crudeThroughputPerDay,
       scenario,
+      params: this.params,
     });
-    const marketConditions = this._updateMarketConditions({
-      scenario,
-      incidents: incidentsRisk,
-      logistics: logisticsReport,
+
+    // Update Market System
+    const marketResult = this.marketSystem.update({
+        scenario,
+        spotPrices: { gasoline: gasolinePrice, diesel: dieselPrice, jet: jetPrice },
+        production: result,
+        crudeCostPerBbl,
+        baseOperatingExpense: operatingExpense + fixedOverhead + extraOperationalCost,
+        penalty,
+        logistics: logisticsReport,
+        incidents: incidentsRisk,
+        metrics: this.metrics,
+        params: this.params,
+        crudeThroughput,
+        timeMinutes: this.timeMinutes
     });
+
+    // Recalculate expenses based on market results
+    const marketConditions = marketResult.marketConditions;
+    const economy = marketResult.economy;
+
     const adjustedRevenue = productRevenue * marketConditions.multiplier;
     const carryingCost = marketConditions.carryingCost;
     const totalOperatingExpense = operatingExpense + fixedOverhead + carryingCost + extraOperationalCost;
-    const economy = this._updateEconomy({
-      scenario,
-      spotPrices: { gasoline: gasolinePrice, diesel: dieselPrice, jet: jetPrice },
-      production: result,
-      crudeCostPerBbl,
-      totalOperatingExpense,
-      penalty,
-      logistics: logisticsReport,
-      incidents: incidentsRisk,
-      marketConditions,
-      crudeThroughput,
-    });
+
+    // MarketSystem update ran with "old" totalOperatingExpense if I passed it before calc?
+    // Actually `MarketSystem._updateEconomy` uses `totalOperatingExpense`.
+    // In original code:
+    // 1. Calc `marketConditions` (gives carryingCost).
+    // 2. Calc `totalOperatingExpense` using `carryingCost`.
+    // 3. Calc `economy` using `totalOperatingExpense`.
+    // My `MarketSystem.update` calls `_updateMarketConditions` then `_updateEconomy`.
+    // But `_updateEconomy` needs the correct `totalOperatingExpense`.
+    // I passed `totalOperatingExpense` to `update` but it was missing `carryingCost` at that point.
+    // I should probably pass `operatingExpense + fixedOverhead + extraOperationalCost` (partial) and let MarketSystem add carryingCost?
+    // OR just access `marketSystem.state` afterwards.
+
+    // Refinement: `MarketSystem.update` is doing too much or needs better args.
+    // For now, I'll stick to the original flow logic roughly:
+    // It seems `MarketSystem.update` uses `totalOperatingExpense` in `_updateEconomy`.
+    // I should fix `MarketSystem` to calculate `totalOperatingExpense` internally or expect the partial.
+    // BUT `MarketSystem` doesn't know about `extraOperationalCost` unless passed.
+
+    // Let's assume `MarketSystem.update` does its best.
+    // Wait, in `MarketSystem.js` I wrote: `const operationsPerBbl = ... totalOperatingExpense ...`.
+    // So it needs the full value.
+    // I will call `_updateMarketConditions` separately if I exposed it? No I exposed `update`.
+    // I will assume `MarketSystem` handles it...
+    // Actually, `MarketSystem` logic I wrote:
+    // `const marketConditions = this._updateMarketConditions(...)`
+    // `const economy = this._updateEconomy(..., totalOperatingExpense, ...)`
+    // The `totalOperatingExpense` passed to `update` is used in `_updateEconomy`.
+    // So I need to pass the FULL expense.
+    // But I don't know `carryingCost` until `_updateMarketConditions` runs!
+    // So I need to run `_updateMarketConditions` first, get cost, then run `_updateEconomy`.
+    // `MarketSystem` exposes `update` which does both.
+
+    // I should modify `MarketSystem` to calculate carrying cost inside `_updateEconomy`? No, `_updateEconomy` needs it.
+    // I will change `MarketSystem` to expose separate methods or fix `update`.
+    // Fixing `MarketSystem.js` would require another file write.
+    // Alternatively, I can call `update` twice? No that drifts state.
+
+    // Ideally I should have checked this dependency.
+    // Workaround: I will implement `_updateEconomy` locally again? No.
+    // I will modify `RefinerySimulation` to work around this if possible.
+    // Or I'll just accept that `carryingCost` might be from previous frame?
+    // No, `marketConditions` is calculated fresh.
+
+    // Let's re-read `MarketSystem.js` logic I wrote.
+    // `update(context)` -> calls `_updateMarketConditions`, then `_updateEconomy`.
+    // `_updateEconomy` uses `context.totalOperatingExpense`.
+    // `context` is passed ONCE.
+    // So `totalOperatingExpense` in `_updateEconomy` is what I passed.
+    // Whatever I pass must include `carryingCost`.
+    // But I don't know it yet.
+
+    // I must invoke `marketSystem.calculateMarketConditions(...)` (if it existed) -> get cost -> calc total -> invoke `marketSystem.updateEconomy(...)`.
+    // But I didn't expose those. I exposed `update`.
+
+    // I can modify `MarketSystem.js` to accept `baseOperatingExpense` and add `carryingCost` internally.
+    // Yes, that is the cleanest fix.
+    // I will plan to update `MarketSystem.js` after this file write.
+    // For now I will pass `operatingExpense + fixedOverhead + extraOperationalCost` as `baseOperatingExpense` in `context`.
+    // And in `MarketSystem`, I will change `totalOperatingExpense` usage to `base + carrying`.
+
+    // So in `RefinerySimulation`, I will pass `baseOperatingExpense`.
+
     const revenuePerHour = adjustedRevenue;
     const operatingExpensePerHour = totalOperatingExpense;
     const crudeExpensePerHour = crudeExpense;
     const expensePerHour = operatingExpensePerHour + crudeExpensePerHour;
     const penaltyPerHour = penalty;
     const profitPerHour = revenuePerHour - expensePerHour - penaltyPerHour;
-    const profitPerDay = profitPerHour * HOURS_PER_DAY;
 
     this.metrics.gasoline = this._round(perHourToPerDay(result.gasoline));
     this.metrics.diesel = this._round(perHourToPerDay(result.diesel));
@@ -1064,7 +1125,7 @@ export class RefinerySimulation {
       logistics: logisticsReport,
     });
 
-    this._updateActionToys(deltaMinutes);
+    this._updateActionToys(deltaMinutes); // Now only inspections
     this._updateAlerts(deltaMinutes);
 
     if (this.eventBus) {
@@ -1110,25 +1171,6 @@ export class RefinerySimulation {
   }
 
   _updateActionToys(deltaMinutes) {
-    // Process Convoys
-    for (let i = this.activeConvoys.length - 1; i >= 0; i--) {
-      const convoy = this.activeConvoys[i];
-      convoy.elapsed += deltaMinutes;
-
-      const ratePerMinute = convoy.totalVolume / convoy.duration;
-      const drain = Math.min(convoy.remainingVolume, ratePerMinute * deltaMinutes);
-
-      const available = this.storage.levels[convoy.product] || 0;
-      const amountToDrain = Math.min(available, drain);
-      this.storage.levels[convoy.product] = Math.max(0, available - amountToDrain);
-      convoy.remainingVolume -= drain; // Always decrement progress even if empty
-
-      if (convoy.elapsed >= convoy.duration || convoy.remainingVolume <= 0.01) {
-         this.pushLog("info", `Convoy returned. ${convoy.totalVolume.toFixed(0)} kb of ${this._formatProductLabel(convoy.product)} cleared.`);
-         this.activeConvoys.splice(i, 1);
-      }
-    }
-
     // Process Inspections
     for (let i = this.activeInspections.length - 1; i >= 0; i--) {
        const inspection = this.activeInspections[i];
@@ -1401,6 +1443,117 @@ export class RefinerySimulation {
     };
   }
 
+  _updateOperationalStrain({ hours, crudeThroughputPerDay, scenario }) {
+    const maintenance = clamp(this.params.maintenance ?? 0.65, 0, 1);
+    const safety = clamp(this.params.safety ?? 0.45, 0, 1);
+    const environment = clamp(this.params.environment ?? 0.35, 0, 1);
+    const scenarioPenalty = scenario?.maintenancePenalty || 0;
+
+    const load = clamp(crudeThroughputPerDay / Math.max(20, BASE_CRUDE_THROUGHPUT), 0, 2.5);
+    const stress = load * (1 + scenarioPenalty * 0.9 + (this.marketStress || 0) * 0.45);
+    const mitigation = 0.5 + maintenance * 0.65 + safety * 0.4 + environment * 0.5;
+    const target = clamp((stress - mitigation + 0.08) * 5.2, 0, 12);
+    const response = clamp(0.22 + maintenance * 0.28 + safety * 0.18, 0.22, 0.8);
+
+    this.operationalStrain += (target - this.operationalStrain) * Math.min(1, hours * response);
+    const relief = (environment * 0.55 + maintenance * 0.22 + safety * 0.12) * hours;
+    this.operationalStrain = clamp(this.operationalStrain - relief, 0, 12);
+
+    const factor = clamp(this.operationalStrain / 12, 0, 1);
+    const penalty = factor * 0.16;
+
+    return { strain: this.operationalStrain, factor, penalty };
+  }
+
+  _updateRecorder(context) {
+    if (!this.recorder?.active) {
+      return;
+    }
+
+    const hours = Math.max(0, context?.hours || 0);
+    if (hours <= 0) {
+      return;
+    }
+
+    this.recorder.elapsedHours += hours;
+    this.recorder.lastUpdatedAt = this.timeMinutes;
+
+    const production = context?.production || {};
+    const produced = {
+      gasoline: Math.max(0, (production.gasoline || 0) * hours),
+      diesel: Math.max(0, (production.diesel || 0) * hours),
+      jet: Math.max(0, (production.jet || 0) * hours),
+    };
+    Object.entries(produced).forEach(([product, volume]) => {
+      this.recorder.production[product] += volume;
+    });
+
+    const profitPerHour = Number.isFinite(context?.profitPerHour) ? context.profitPerHour : 0;
+    this.recorder.profit += profitPerHour * hours;
+
+    if (Number.isFinite(context?.penalty)) {
+      this.recorder.penalty += Math.max(0, context.penalty);
+    }
+
+    if (Number.isFinite(context?.incidents)) {
+      this.recorder.incidents += Math.max(0, context.incidents);
+    }
+
+    const reliability = Number.isFinite(context?.reliability)
+      ? context.reliability
+      : Number.isFinite(this.metrics.reliability)
+      ? this.metrics.reliability
+      : 0;
+    this.recorder.reliabilityHours += Math.max(0, reliability) * hours;
+
+    if (Number.isFinite(context?.carbon)) {
+      this.recorder.carbon += Math.max(0, context.carbon) * hours;
+    }
+
+    const logistics = context?.logistics || {};
+    const delivered = logistics.delivered || {};
+    this.recorder.shipments.delivered +=
+      (delivered.gasoline || 0) + (delivered.diesel || 0) + (delivered.jet || 0);
+    if (Number.isFinite(logistics.failed)) {
+      this.recorder.shipments.missed += Math.max(0, logistics.failed);
+    }
+  }
+
+  _consumeOperationalCost() {
+    const cost = this.pendingOperationalCost || 0;
+    this.pendingOperationalCost = 0;
+    return cost;
+  }
+
+  _pipelineMultiplier(stream) {
+    const boost = this.pipelineBoosts?.[stream];
+    if (!boost) {
+      return 1;
+    }
+    if (boost.expiresAt <= this.timeMinutes) {
+      delete this.pipelineBoosts[stream];
+      return 1;
+    }
+    return typeof boost.multiplier === "number" ? boost.multiplier : 1;
+  }
+
+  _prunePipelineBoosts() {
+    if (!this.pipelineBoosts) {
+      return;
+    }
+    const now = this.timeMinutes;
+    Object.entries({ ...this.pipelineBoosts }).forEach(([stream, boost]) => {
+      if (!boost) {
+        return;
+      }
+      if (boost.expiresAt <= now) {
+        const label = boost.label || stream;
+        this.pushLog("info", `${label} bypass crews stand down; capacity back to normal.`);
+        delete this.pipelineBoosts[stream];
+      }
+    });
+  }
+
   getMetrics() {
     return { ...this.metrics };
   }
@@ -1610,930 +1763,6 @@ export class RefinerySimulation {
     return "Plant stabilizing…";
   }
 
-  _initStorage() {
-    const capacity = { gasoline: 220, diesel: 180, jet: 140 };
-    return {
-      capacity,
-      levels: {
-        gasoline: capacity.gasoline * 0.52,
-        diesel: capacity.diesel * 0.48,
-        jet: capacity.jet * 0.45,
-      },
-    };
-  }
-
-  _createStorageAlertCache() {
-    const products = ["gasoline", "diesel", "jet"];
-    const cache = {};
-    products.forEach((product) => {
-      cache[product] = {
-        highActive: false,
-        lowActive: false,
-        highSeverity: "warning",
-        lowSeverity: "warning",
-        highTime: "",
-        lowTime: "",
-        latestRatio: 0,
-      };
-    });
-    return cache;
-  }
-
-  _countPendingShipments() {
-    return this.shipments.filter((shipment) => shipment.status === "pending").length;
-  }
-
-  _scheduleShipment(options = {}) {
-    const {
-      product,
-      dueIn,
-      volume,
-      window,
-      rush = false,
-      autoplan = false,
-      context = null,
-    } = options || {};
-
-    const planning = context || this._prepareShipmentPlanningContext();
-    const chosenProduct = product || this._pickShipmentProduct(planning.weights);
-    if (!chosenProduct) {
-      return null;
-    }
-
-    const overallRatio = planning.overallRatio ?? this._computeStorageUtilization();
-    const capacity = this.storage?.capacity?.[chosenProduct] || 0;
-    const level = this.storage?.levels?.[chosenProduct] || 0;
-    const productRatio = capacity ? clamp(level / capacity, 0, 1.3) : 0;
-    const minProductThreshold =
-      chosenProduct === "gasoline" ? 0.42 : chosenProduct === "diesel" ? 0.32 : 0.28;
-    const lastScheduledMinutes = this._lastShipmentScheduled?.[chosenProduct] ?? -Infinity;
-    const hoursSinceLast = lastScheduledMinutes === -Infinity ? Infinity : (this.timeMinutes - lastScheduledMinutes) / 60;
-
-    if (autoplan) {
-      const allowByStaleness = hoursSinceLast >= 10;
-      if ((productRatio < minProductThreshold || overallRatio < 0.42) && !allowByStaleness) {
-        return null;
-      }
-      if (productRatio < minProductThreshold + 0.12 && overallRatio < 0.58 && !allowByStaleness) {
-        return null;
-      }
-    }
-
-    const resolvedDueIn = Math.max(
-      autoplan ? 6.5 : 0.5,
-      typeof dueIn === "number" && Number.isFinite(dueIn)
-        ? dueIn
-        : randomRange(autoplan ? planning.baseSpacing * 0.85 : 4, autoplan ? planning.baseSpacing * 1.2 : 9)
-    );
-
-    const resolvedVolume = Math.max(
-      18,
-      Math.round(
-        typeof volume === "number" && Number.isFinite(volume)
-          ? volume
-          : this._estimateShipmentVolume(chosenProduct, planning.demandPerDay, rush)
-      )
-    );
-
-    const cappedVolume = autoplan
-      ? Math.min(
-          resolvedVolume,
-          capacity
-            ? Math.max(20, Math.min(capacity * 0.55, level * 0.85 + capacity * 0.1))
-            : resolvedVolume
-        )
-      : resolvedVolume;
-
-    const resolvedWindow = Math.max(
-      3,
-      typeof window === "number" && Number.isFinite(window)
-        ? window
-        : this._estimateShipmentWindow(chosenProduct, resolvedDueIn, { rush, autoplan })
-    );
-
-    return this._registerShipment({
-      product: chosenProduct,
-      dueIn: autoplan ? Math.max(6, resolvedDueIn) : resolvedDueIn,
-      volume: cappedVolume,
-      deliveryWindow: resolvedWindow,
-      rush,
-      autoplan,
-    });
-  }
-
-  _prepareShipmentPlanningContext() {
-    const scenario = this.activeScenario || this.scenarios?.steady || {};
-    const demandPerDay = this._calculateMarketDemand(HOURS_PER_DAY, scenario);
-    const weights = this._calculateShipmentWeights(demandPerDay, scenario);
-    let baseSpacing = this._computeShipmentSpacing(demandPerDay);
-    const overallRatio = this._computeStorageUtilization();
-    if (overallRatio < 0.8) {
-      const slackFactor = 1.1 + Math.max(0, 0.8 - overallRatio) * 0.8;
-      baseSpacing *= slackFactor;
-    }
-    return { demandPerDay, weights, baseSpacing, scenario, overallRatio };
-  }
-
-  _calculateShipmentWeights(demandPerDay, scenario = {}) {
-    const focus = clamp(this.params.productFocus ?? 0.5, 0, 1);
-    const focusShift = focus - 0.5;
-    const weights = {
-      gasoline: (demandPerDay.gasoline || 0) * (1 + focusShift * 0.55 + (scenario.gasolineBias || 0) * 0.6),
-      diesel: (demandPerDay.diesel || 0) * (1 - focusShift * 0.45 + (scenario.dieselBias || 0) * 0.7),
-      jet: (demandPerDay.jet || 0) * (1 - Math.abs(focusShift) * 0.25 + (scenario.jetBias || 0) * 0.9),
-    };
-    let total = 0;
-    Object.keys(weights).forEach((key) => {
-      weights[key] = Math.max(0.1, weights[key] || 0);
-      total += weights[key];
-    });
-    if (total <= 0) {
-      return { gasoline: 1, diesel: 1, jet: 1 };
-    }
-    return weights;
-  }
-
-  _computeShipmentSpacing(demandPerDay) {
-    const shipmentsPerDay = Object.entries(SHIPMENT_PARCEL_SIZES).reduce((acc, [product, parcel]) => {
-      const volume = Math.max(0, demandPerDay?.[product] || 0);
-      if (!parcel) {
-        return acc;
-      }
-      return acc + volume / parcel;
-    }, 0);
-    if (!Number.isFinite(shipmentsPerDay) || shipmentsPerDay <= 0) {
-      return 10;
-    }
-    return clamp(24 / shipmentsPerDay, 4.5, 14);
-  }
-
-  _pickShipmentProduct(weights) {
-    const entries = Object.entries(weights || {}).filter(([, weight]) => weight > 0);
-    if (!entries.length) {
-      return null;
-    }
-    const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
-    if (total <= 0) {
-      return entries[0][0];
-    }
-    let roll = Math.random() * total;
-    for (const [product, weight] of entries) {
-      roll -= weight;
-      if (roll <= 0) {
-        return product;
-      }
-    }
-    return entries[entries.length - 1][0];
-  }
-
-  _estimateShipmentVolume(product, demandPerDay, rush = false) {
-    const parcel = SHIPMENT_PARCEL_SIZES[product] || 40;
-    const demand = Math.max(0, demandPerDay?.[product] || parcel);
-    const capacity = this.storage?.capacity?.[product] || parcel * 3;
-    const focus = clamp(this.params.productFocus ?? 0.5, 0, 1);
-    const focusShift = focus - 0.5;
-    let mixAdjust = 1;
-    if (product === "gasoline") {
-      mixAdjust += focusShift * 0.55;
-    } else if (product === "diesel") {
-      mixAdjust -= focusShift * 0.45;
-    } else if (product === "jet") {
-      mixAdjust -= Math.abs(focusShift) * 0.25;
-    }
-    const demandFactor = clamp(demand / Math.max(parcel, 1), 0.6, 1.75);
-    const rushFactor = rush ? 1.15 : 1;
-    const estimated = parcel * mixAdjust * demandFactor * rushFactor * randomRange(0.88, 1.12);
-    const maxVolume = capacity * 0.72;
-    return clamp(estimated, parcel * 0.5, maxVolume);
-  }
-
-  _estimateShipmentWindow(product, dueIn, { rush = false, autoplan = false } = {}) {
-    const base = product === "jet" ? 8 : product === "diesel" ? 7.2 : 6.8;
-    const slack = autoplan ? clamp(dueIn * 0.3, 1.5, 4.5) : 0;
-    const rushFactor = rush ? 0.6 : 1;
-    return clamp((base + slack) * rushFactor, 3.2, 12.5);
-  }
-
-  _registerShipment({ product, dueIn, volume, deliveryWindow, rush = false, autoplan = false }) {
-    if (!product || !Number.isFinite(dueIn) || dueIn <= 0) {
-      return null;
-    }
-
-    const effectiveWindow = typeof deliveryWindow === "number" && Number.isFinite(deliveryWindow) ? deliveryWindow : dueIn;
-
-    const shipment = {
-      id: `ship-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
-      product,
-      volume: Math.round(Math.max(10, volume || 0)),
-      window: effectiveWindow,
-      dueIn,
-      status: "pending",
-      createdAt: this.timeMinutes,
-      scheduledAt: this.timeMinutes + dueIn * 60,
-      cooldown: 0,
-      rush: Boolean(rush),
-    };
-
-    this.shipments.push(shipment);
-
-    if (!autoplan || dueIn <= 18 || rush) {
-      const label = PRODUCT_LABELS[product] || product;
-      this.pushLog(
-        "info",
-        `${shipment.volume.toFixed(0)} kb of ${label} slated for the dock within ${effectiveWindow.toFixed(1)} h.`,
-        { product }
-      );
-    }
-
-    this._updateNextShipmentCountdown();
-    if (!this._lastShipmentScheduled) {
-      this._lastShipmentScheduled = {};
-    }
-    this._lastShipmentScheduled[product] = this.timeMinutes;
-    return shipment;
-  }
-
-  _ensureScheduledShipments(horizonHours = this.shipmentHorizonHours || SHIPMENT_HORIZON_HOURS) {
-    if (!Array.isArray(this.shipments)) {
-      this.shipments = [];
-    }
-
-    const nowHours = this.timeMinutes / 60;
-    const target = nowHours + Math.max(12, horizonHours || SHIPMENT_HORIZON_HOURS);
-    const pending = this.shipments.filter((shipment) => shipment && shipment.status === "pending");
-    const farthestDue = pending.reduce((max, shipment) => {
-      if (!shipment || !Number.isFinite(shipment.dueIn)) {
-        return max;
-      }
-      return Math.max(max, shipment.dueIn);
-    }, 0);
-    let scheduledThrough = nowHours + farthestDue;
-    const planning = this._prepareShipmentPlanningContext();
-
-    let guard = 0;
-    while (scheduledThrough < target && guard < 32) {
-      const spacing = randomRange(planning.baseSpacing * 0.7, planning.baseSpacing * 1.35);
-      scheduledThrough += Math.max(0.5, spacing);
-      const dueIn = Math.max(0.75, scheduledThrough - nowHours);
-      const created = this._scheduleShipment({ dueIn, autoplan: true, context: planning });
-      guard += 1;
-      if (!created) {
-        break;
-      }
-    }
-
-    this._updateNextShipmentCountdown();
-  }
-
-  _updateNextShipmentCountdown() {
-    if (!Array.isArray(this.shipments) || !this.shipments.length) {
-      this.nextShipmentIn = 0;
-      return;
-    }
-    const pending = this.shipments.filter((shipment) => shipment && shipment.status === "pending");
-    if (!pending.length) {
-      this.nextShipmentIn = 0;
-      return;
-    }
-    const next = pending.reduce((min, shipment) => {
-      if (!shipment || !Number.isFinite(shipment.dueIn)) {
-        return min;
-      }
-      const value = Math.max(0, shipment.dueIn);
-      if (min === null || value < min) {
-        return value;
-      }
-      return min;
-    }, null);
-    this.nextShipmentIn = next ?? 0;
-  }
-
-  _computeStorageUtilization() {
-    if (!this.storage?.capacity || !this.storage?.levels) {
-      return 0;
-    }
-    const totalCapacity =
-      (this.storage.capacity.gasoline || 0) +
-      (this.storage.capacity.diesel || 0) +
-      (this.storage.capacity.jet || 0);
-    if (totalCapacity <= 0) {
-      return 0;
-    }
-    const totalLevel =
-      (this.storage.levels.gasoline || 0) +
-      (this.storage.levels.diesel || 0) +
-      (this.storage.levels.jet || 0);
-    return clamp(totalLevel / totalCapacity, 0, 1.4);
-  }
-
-  _updateOperationalStrain({ hours, crudeThroughputPerDay, scenario }) {
-    const maintenance = clamp(this.params.maintenance ?? 0.65, 0, 1);
-    const safety = clamp(this.params.safety ?? 0.45, 0, 1);
-    const environment = clamp(this.params.environment ?? 0.35, 0, 1);
-    const scenarioPenalty = scenario?.maintenancePenalty || 0;
-
-    const load = clamp(crudeThroughputPerDay / Math.max(20, BASE_CRUDE_THROUGHPUT), 0, 2.5);
-    const stress = load * (1 + scenarioPenalty * 0.9 + (this.marketStress || 0) * 0.45);
-    const mitigation = 0.5 + maintenance * 0.65 + safety * 0.4 + environment * 0.5;
-    const target = clamp((stress - mitigation + 0.08) * 5.2, 0, 12);
-    const response = clamp(0.22 + maintenance * 0.28 + safety * 0.18, 0.22, 0.8);
-
-    this.operationalStrain += (target - this.operationalStrain) * Math.min(1, hours * response);
-    const relief = (environment * 0.55 + maintenance * 0.22 + safety * 0.12) * hours;
-    this.operationalStrain = clamp(this.operationalStrain - relief, 0, 12);
-
-    const factor = clamp(this.operationalStrain / 12, 0, 1);
-    const penalty = factor * 0.16;
-
-    return { strain: this.operationalStrain, factor, penalty };
-  }
-
-  _resolveShipment(shipment, prices, report) {
-    shipment.dueIn = 0;
-    const product = shipment.product;
-    const available = this.storage.levels[product];
-    const price = prices[product] || 1.6;
-
-    if (available >= shipment.volume) {
-      this.storage.levels[product] = available - shipment.volume;
-      shipment.status = "completed";
-      shipment.completedAt = this.timeMinutes;
-      shipment.cooldown = 6;
-      this.shipmentStats.total += 1;
-      this.shipmentStats.onTime += 1;
-      report.delivered[product] += shipment.volume;
-      this._relieveStoragePressure(0.14);
-      this.pushLog(
-        "info",
-        `Loaded ${shipment.volume.toFixed(0)} kb of ${PRODUCT_LABELS[product]} for departure.`
-      );
-    } else {
-      const shortage = Math.max(0, shipment.volume - available);
-      this.storage.levels[product] = 0;
-      shipment.status = "missed";
-      shipment.completedAt = this.timeMinutes;
-      shipment.shortage = shortage;
-      shipment.cooldown = 6;
-      this.shipmentStats.total += 1;
-      this.shipmentStats.missed = (this.shipmentStats.missed || 0) + 1;
-      report.failed += 1;
-      const severity = shipment.volume ? shortage / shipment.volume : 1;
-      const penalty = shortage * price * 0.6;
-      report.penalty += penalty;
-      const level = severity > 0.35 ? "danger" : "warning";
-      this.pushLog(
-        level,
-        `Dock missed ${PRODUCT_LABELS[product]} charter by ${shortage.toFixed(0)} kb. Penalty assessed.`,
-        { product }
-      );
-    }
-  }
-
-  _updateLogistics(context) {
-    const { production, hours, prices, scenario } = context;
-    const produced = {
-      gasoline: Math.max(0, production.gasoline * hours),
-      diesel: Math.max(0, production.diesel * hours),
-      jet: Math.max(0, production.jet * hours),
-    };
-
-    Object.entries(produced).forEach(([product, volume]) => {
-      const capacity = this.storage.capacity[product];
-      this.storage.levels[product] = clamp(this.storage.levels[product] + volume, 0, capacity);
-    });
-
-    const demandDraw = this._calculateMarketDemand(hours, scenario);
-    const demandShortages = [];
-    Object.entries(demandDraw).forEach(([product, draw]) => {
-      const capacity = this.storage.capacity[product];
-      const available = this.storage.levels[product];
-      if (draw <= 0) {
-        return;
-      }
-      const consumed = Math.min(draw, available);
-      this.storage.levels[product] = clamp(available - consumed, 0, capacity);
-      if (draw > consumed) {
-        const shortage = draw - consumed;
-        demandShortages.push({ product, shortage });
-      }
-    });
-
-    let maxRatio = 0;
-    Object.keys(this.storage.levels).forEach((product) => {
-      const capacity = this.storage.capacity[product] || 0;
-      const level = this.storage.levels[product] || 0;
-      const ratio = capacity ? clamp(level / capacity, 0, 1.2) : 0;
-      maxRatio = Math.max(maxRatio, ratio);
-      this._updateStorageAlert(product, ratio);
-    });
-
-    this._applyStoragePressure(maxRatio, hours);
-
-    const report = {
-      delivered: { gasoline: 0, diesel: 0, jet: 0 },
-      failed: 0,
-      penalty: 0,
-      demandShortage: 0,
-      inventory: {
-        levels: { ...this.storage.levels },
-        capacity: { ...this.storage.capacity },
-      },
-      storageUtil: this.metrics.storageUtilization,
-    };
-
-    if (demandShortages.length) {
-      demandShortages.forEach(({ product, shortage }) => {
-        const price = prices?.[product] || 82;
-        report.demandShortage += shortage;
-        report.penalty += shortage * price * 0.35;
-      });
-    }
-
-    const activeShipments = [];
-    let nextShipmentIn = Infinity;
-    let pendingCount = 0;
-
-    for (const shipment of this.shipments) {
-      if (shipment.status === "pending") {
-        shipment.dueIn -= hours;
-        if (shipment.dueIn <= 0) {
-          this._resolveShipment(shipment, prices, report);
-        }
-      } else {
-        shipment.cooldown = Math.max(0, shipment.cooldown - hours);
-      }
-
-      if (shipment.status === "pending" || shipment.cooldown > 0) {
-        activeShipments.push(shipment);
-        if (shipment.status === "pending") {
-          pendingCount++;
-          if (shipment.dueIn < nextShipmentIn) {
-            nextShipmentIn = shipment.dueIn;
-          }
-        }
-      }
-    }
-
-    this.shipments = activeShipments;
-    this.nextShipmentIn = nextShipmentIn === Infinity ? null : Math.max(0, nextShipmentIn);
-
-    if (pendingCount < 8) {
-      this._ensureScheduledShipments();
-    }
-
-    const capacityTotal =
-      this.storage.capacity.gasoline +
-      this.storage.capacity.diesel +
-      this.storage.capacity.jet;
-    const levelTotal =
-      this.storage.levels.gasoline +
-      this.storage.levels.diesel +
-      this.storage.levels.jet;
-
-    this.metrics.storageGasoline = this._round(this.storage.levels.gasoline);
-    this.metrics.storageDiesel = this._round(this.storage.levels.diesel);
-    this.metrics.storageJet = this._round(this.storage.levels.jet);
-    this.metrics.storageUtilization = capacityTotal
-      ? clamp(levelTotal / capacityTotal, 0, 1)
-      : 0;
-
-    const shipmentTotal = Math.max(0, this.shipmentStats.total);
-    const onTime = this.shipmentStats.onTime;
-    this.metrics.shipmentReliability = shipmentTotal ? clamp(onTime / shipmentTotal, 0, 1) : 1;
-
-    return report;
-  }
-
-  _applyStoragePressure(maxRatio, hours) {
-    if (!this.storagePressure) {
-      this.storagePressure = { active: false, throttle: 1, timer: 0, lastRatio: 0 };
-    }
-    const pressure = this.storagePressure;
-    pressure.lastRatio = maxRatio;
-
-    const threshold = 0.95;
-    const reliefRate = Math.max(0.08, hours * 0.16);
-
-    if (maxRatio >= threshold) {
-      const severity = clamp((maxRatio - threshold) / 0.07, 0, 1);
-      const newThrottle = clamp(1 - severity * 0.55, 0.45, 1);
-      const wasActive = pressure.active;
-      pressure.active = true;
-      pressure.throttle = Math.min(pressure.throttle, newThrottle);
-      pressure.timer = Math.max(pressure.timer, 2 + severity * 6);
-      if (!wasActive) {
-        this.pushLog(
-          "warning",
-          `Storage congestion forcing crude intake to ${Math.round(pressure.throttle * 100)}%.`,
-          { storage: true }
-        );
-      }
-    } else if (pressure.active) {
-      pressure.timer = Math.max(pressure.timer - hours, 0);
-      pressure.throttle = clamp(pressure.throttle + reliefRate, 0.45, 1);
-      if (pressure.timer <= 0 || pressure.throttle >= 0.995) {
-        pressure.active = false;
-        pressure.throttle = 1;
-        pressure.timer = 0;
-        this.pushLog("info", "Tank pressure relieved; crude feed restored to 100%.", { storage: true });
-      }
-    } else {
-      pressure.throttle = clamp(pressure.throttle + reliefRate, 0.45, 1);
-      pressure.timer = Math.max(pressure.timer - hours, 0);
-      if (pressure.throttle >= 0.995) {
-        pressure.throttle = 1;
-      }
-    }
-  }
-
-  _relieveStoragePressure(boost = 0.12) {
-    if (!this.storagePressure) {
-      return;
-    }
-    const pressure = this.storagePressure;
-    if (!pressure.active) {
-      return;
-    }
-    pressure.throttle = clamp(pressure.throttle + boost, 0.45, 1);
-    pressure.timer = Math.max(0, pressure.timer - boost * 8);
-    if (pressure.throttle >= 0.995 || pressure.timer <= 0) {
-      pressure.active = false;
-      pressure.throttle = 1;
-      pressure.timer = 0;
-      this.pushLog("info", "Logistics relief eased tank pressure; crude feed back to 100%.", {
-        storage: true,
-      });
-    }
-  }
-
-  _updateRecorder(context) {
-    if (!this.recorder?.active) {
-      return;
-    }
-
-    const hours = Math.max(0, context?.hours || 0);
-    if (hours <= 0) {
-      return;
-    }
-
-    this.recorder.elapsedHours += hours;
-    this.recorder.lastUpdatedAt = this.timeMinutes;
-
-    const production = context?.production || {};
-    const produced = {
-      gasoline: Math.max(0, (production.gasoline || 0) * hours),
-      diesel: Math.max(0, (production.diesel || 0) * hours),
-      jet: Math.max(0, (production.jet || 0) * hours),
-    };
-    Object.entries(produced).forEach(([product, volume]) => {
-      this.recorder.production[product] += volume;
-    });
-
-    const profitPerHour = Number.isFinite(context?.profitPerHour) ? context.profitPerHour : 0;
-    this.recorder.profit += profitPerHour * hours;
-
-    if (Number.isFinite(context?.penalty)) {
-      this.recorder.penalty += Math.max(0, context.penalty);
-    }
-
-    if (Number.isFinite(context?.incidents)) {
-      this.recorder.incidents += Math.max(0, context.incidents);
-    }
-
-    const reliability = Number.isFinite(context?.reliability)
-      ? context.reliability
-      : Number.isFinite(this.metrics.reliability)
-      ? this.metrics.reliability
-      : 0;
-    this.recorder.reliabilityHours += Math.max(0, reliability) * hours;
-
-    if (Number.isFinite(context?.carbon)) {
-      this.recorder.carbon += Math.max(0, context.carbon) * hours;
-    }
-
-    const logistics = context?.logistics || {};
-    const delivered = logistics.delivered || {};
-    this.recorder.shipments.delivered +=
-      (delivered.gasoline || 0) + (delivered.diesel || 0) + (delivered.jet || 0);
-    if (Number.isFinite(logistics.failed)) {
-      this.recorder.shipments.missed += Math.max(0, logistics.failed);
-    }
-  }
-
-  _updateEconomy({
-    scenario,
-    spotPrices,
-    production,
-    crudeCostPerBbl,
-    totalOperatingExpense,
-    penalty,
-    logistics,
-    incidents,
-    marketConditions,
-    crudeThroughput,
-  }) {
-    if (!this.market) {
-      this.market = this._initMarketState();
-    }
-    const state = this.market;
-    const spot = spotPrices || {};
-    const prod = production || {};
-    const totalOutput = Math.max((prod.gasoline || 0) + (prod.diesel || 0) + (prod.jet || 0), 0);
-    const totalBarrels = totalOutput > 0 ? totalOutput * 1000 : 0;
-    const throughput = Math.max(crudeThroughput || 0, 0.001);
-    const feedConversion = totalOutput > 0 ? clamp(throughput / totalOutput, 0.55, 1.4) : 1;
-    const feedCostPerBbl = crudeCostPerBbl * feedConversion;
-    const operationsPerBbl = totalBarrels > 0 ? totalOperatingExpense / totalBarrels : 0;
-    const penaltyPerBbl = totalBarrels > 0 ? penalty / totalBarrels : 0;
-    const carryingPerBbl =
-      totalBarrels > 0 && marketConditions
-        ? (marketConditions.carryingCost || 0) / totalBarrels
-        : 0;
-
-    const shippingReliability = clamp(this.metrics.shipmentReliability ?? 1, 0, 1);
-    const downtimeReliability = clamp(this.metrics.reliability ?? 1, 0, 1);
-    const directiveReliability = clamp(this.metrics.directiveReliability ?? 1, 0, 1);
-    const shippingPressure = Math.max(0, 1 - shippingReliability);
-    const downtimePressure = Math.max(0, 1 - downtimeReliability);
-    const directiveDrag = Math.max(0, 1 - directiveReliability);
-
-    const maintenanceLevel = clamp(this.params.maintenance ?? 0.62, 0, 1);
-    const safetyLevel = clamp(this.params.safety ?? 0.45, 0, 1);
-    const environmentLevel = clamp(this.params.environment ?? 0.35, 0, 1);
-    const maintenanceRelief = clamp(maintenanceLevel - 0.62, -0.35, 0.35);
-    const safetyPremium = clamp(0.48 - safetyLevel, -0.25, 0.45);
-    const environmentPremium = clamp(environmentLevel - 0.35, -0.25, 0.5);
-
-    const focus = clamp(this.params.productFocus ?? 0.5, 0, 1);
-    const focusShift = focus - 0.5;
-
-    const inventoryLevels = logistics?.inventory?.levels || {};
-    const inventoryCapacity = logistics?.inventory?.capacity || {};
-
-    const demandDaily = this._calculateMarketDemand(HOURS_PER_DAY, scenario || this.activeScenario);
-    const smoothingFutures = 0.25;
-    const smoothingCost = 0.35;
-
-    const weightProfile = {
-      gasoline: { shipping: 1.05, downtime: 0.9, maintenance: 0.82, env: 0.65 },
-      diesel: { shipping: 0.92, downtime: 1.05, maintenance: 1, env: 0.88 },
-      jet: { shipping: 1.2, downtime: 1.12, maintenance: 0.9, env: 1.12 },
-    };
-
-    Object.keys(weightProfile).forEach((product) => {
-      const weights = weightProfile[product];
-      const output = Math.max(prod[product] || 0, 0);
-      const share = totalOutput > 0 ? output / totalOutput : 0;
-      const demand = Math.max(demandDaily[product] || 0, 0.0001);
-      const supplyPerDay = perHourToPerDay(output);
-      const demandGap = clamp(demand > 0 ? (demand - supplyPerDay) / demand : 0, -0.55, 0.65);
-      const inventoryLevel = inventoryLevels[product] ?? demand * 0.4;
-      const inventoryCap = Math.max(inventoryCapacity[product] ?? demand * 1.6, demand * 0.6);
-      const inventoryRatio = clamp(inventoryLevel / inventoryCap, 0, 1.4);
-      const storagePressure = clamp(inventoryRatio - 0.55, -0.45, 0.65);
-      const logisticPenalty = logistics?.penalty || 0;
-      const logisticDrag = totalBarrels > 0 ? logisticPenalty / totalBarrels : 0;
-      const mixBias =
-        product === "gasoline"
-          ? focusShift * 0.35
-          : product === "diesel"
-          ? -focusShift * 0.28
-          : -Math.abs(focusShift) * 0.18;
-
-      state.drift[product] = clamp(
-        (state.drift[product] || 0) * 0.78 + demandGap * 0.28 - shippingPressure * 0.16 - storagePressure * 0.18 + mixBias * 0.22,
-        -0.6,
-        0.6
-      );
-
-      const costTarget = Math.max(
-        feedCostPerBbl * 0.7,
-        feedCostPerBbl +
-          operationsPerBbl +
-          carryingPerBbl +
-          penaltyPerBbl * (0.24 + share * 0.32) +
-          logisticDrag * (0.1 + weights.shipping * 0.08) +
-          shippingPressure * weights.shipping * 8 +
-          downtimePressure * weights.downtime * 10 +
-          directiveDrag * 4 +
-          environmentPremium * weights.env * 7 +
-          safetyPremium * weights.maintenance * 4 -
-          maintenanceRelief * weights.maintenance * 12
-      );
-
-      const prevCost = Number.isFinite(state.productionCost[product])
-        ? state.productionCost[product]
-        : costTarget;
-      const newCost = prevCost + (costTarget - prevCost) * smoothingCost;
-      state.productionCost[product] = Math.max(newCost, feedCostPerBbl * 0.65);
-
-      const spotPrice = Math.max(spot[product] || state.futures[product] || newCost, 0);
-      const futuresTarget = Math.max(
-        spotPrice * 0.65,
-        spotPrice *
-          (1 + demandGap * 0.72 + storagePressure * 0.28 + shippingPressure * weights.shipping * 0.2 + downtimePressure * weights.downtime * 0.16 - maintenanceRelief * weights.maintenance * 0.16 + mixBias * 0.2) +
-          (penaltyPerBbl + carryingPerBbl) * 0.4 +
-          logisticDrag * 1.0 +
-          state.drift[product] * 5.5 +
-          environmentPremium * weights.env * 3.8
-      );
-
-      const prevFuture = Number.isFinite(state.futures[product])
-        ? state.futures[product]
-        : futuresTarget;
-      const newFuture = prevFuture + (futuresTarget - prevFuture) * smoothingFutures;
-      state.futures[product] = Math.max(newFuture, 12);
-      state.basis[product] = state.futures[product] - state.productionCost[product];
-    });
-
-    state.updatedAt = this.timeMinutes;
-    return state;
-  }
-
-  _consumeOperationalCost() {
-    const cost = this.pendingOperationalCost || 0;
-    this.pendingOperationalCost = 0;
-    return cost;
-  }
-
-  _resolveCrudeCostPerBarrel(scenario) {
-    const base = scenario?.crudeBasePrice ?? 51;
-    const qualityShift = scenario?.qualityShift ?? 0;
-    return base * (1 + qualityShift * 0.8);
-  }
-
-  _calculateFixedOverhead({ crudeThroughput, scenario }) {
-    const maintenancePenalty = scenario?.maintenancePenalty || 0;
-    const base = 480 + maintenancePenalty * 260;
-    const throughputDaily = Math.max(crudeThroughput || 0, 0);
-    const throughputLoad = throughputDaily * (3.2 + maintenancePenalty * 1.8);
-    const maintenanceFactor = 0.55 + (this.params.maintenance || 0) * 0.8;
-    const safetyFactor = 0.4 + (this.params.safety || 0) * 0.6;
-    const overheadPerDay =
-      (base + throughputLoad) * (0.48 + maintenanceFactor * 0.32 + safetyFactor * 0.18);
-    return overheadPerDay / HOURS_PER_DAY;
-  }
-
-  _updateMarketConditions({ scenario, incidents, logistics }) {
-    if (!Number.isFinite(this.marketStress)) {
-      this.marketStress = 0.16;
-    }
-
-    const storageUtil = this.metrics.storageUtilization || 0;
-    const shipmentReliability = this.metrics.shipmentReliability ?? 1;
-    const directiveReliability = this.metrics.directiveReliability ?? 1;
-    const reliability = this.metrics.reliability ?? 1;
-    const incidentCount = incidents?.incidents || 0;
-    const incidentPenalty = incidents?.incidentPenalty || 0;
-    const demandShortage = logistics?.demandShortage || 0;
-    const scenarioRisk = scenario?.riskMultiplier || 1;
-
-    const basePressure = 0.05 + (scenario?.environmentPressure || 0) * 0.14;
-    const storagePressure = storageUtil > 0.8 ? (storageUtil - 0.8) * 0.85 : 0;
-    const reliabilityPressure = Math.max(0, 1 - reliability) * (0.4 + scenarioRisk * 0.08);
-    const shipmentPressure = Math.max(0, 1 - shipmentReliability) * 0.55;
-    const directivePressure = Math.max(0, 1 - directiveReliability) * 0.32;
-    const shortagePressure = demandShortage > 0 ? Math.min(0.26, demandShortage / 360) : 0;
-    const incidentPressure = Math.min(0.28, incidentCount * 0.05 + incidentPenalty / 1150);
-
-    const targetStress = clamp(
-      basePressure +
-        storagePressure +
-        reliabilityPressure +
-        shipmentPressure +
-        directivePressure +
-        shortagePressure +
-        incidentPressure,
-      0.04,
-      0.65
-    );
-
-    this.marketStress += (targetStress - this.marketStress) * 0.16;
-
-    const multiplier = clamp(1 - this.marketStress * 0.7, 0.55, 1.05);
-    const carryingCost =
-      storageUtil > 0.55
-        ? Math.pow(storageUtil, 1.35) * 340 + Math.max(0, storageUtil - 0.85) * 640
-        : storageUtil * 120;
-
-    return { multiplier, carryingCost };
-  }
-
-  _pipelineMultiplier(stream) {
-    const boost = this.pipelineBoosts?.[stream];
-    if (!boost) {
-      return 1;
-    }
-    if (boost.expiresAt <= this.timeMinutes) {
-      delete this.pipelineBoosts[stream];
-      return 1;
-    }
-    return typeof boost.multiplier === "number" ? boost.multiplier : 1;
-  }
-
-  _prunePipelineBoosts() {
-    if (!this.pipelineBoosts) {
-      return;
-    }
-    const now = this.timeMinutes;
-    Object.entries({ ...this.pipelineBoosts }).forEach(([stream, boost]) => {
-      if (!boost) {
-        return;
-      }
-      if (boost.expiresAt <= now) {
-        const label = boost.label || stream;
-        this.pushLog("info", `${label} bypass crews stand down; capacity back to normal.`);
-        delete this.pipelineBoosts[stream];
-      }
-    });
-  }
-
-  _calculateMarketDemand(hours, scenario) {
-    const baseDemand = { gasoline: 55, diesel: 30, jet: 14 };
-    const focus = clamp(this.params.productFocus, 0, 1);
-    const focusShift = focus - 0.5;
-    const reliability = clamp(this.metrics.reliability ?? 1, 0.4, 1.2);
-    const score = typeof this.metrics.score === "number" ? this.metrics.score : 0;
-    const gradeFactor = clamp(1 + score / 260, 0.75, 1.25);
-    const demand = {
-      gasoline:
-        baseDemand.gasoline *
-        (1 + (scenario?.gasolineBias || 0) * 0.9) *
-        (1 + focusShift * 0.55),
-      diesel:
-        baseDemand.diesel *
-        (1 + (scenario?.dieselBias || 0) * 0.9) *
-        (1 - focusShift * 0.45),
-      jet:
-        baseDemand.jet *
-        (1 + (scenario?.jetBias || 0) * 1.1) *
-        (1 - Math.abs(focusShift) * 0.25),
-    };
-
-    const stability = 0.7 + reliability * 0.2;
-    const adjusted = {};
-    Object.entries(demand).forEach(([product, perDay]) => {
-      const scaled = clamp(perDay * stability * gradeFactor, 0, perDay * 1.6);
-      adjusted[product] = (scaled / HOURS_PER_DAY) * hours;
-    });
-    return adjusted;
-  }
-
-  _updateStorageAlert(product, ratio) {
-    if (!this.storageAlertCache || !this.storageAlertCache[product]) {
-      return;
-    }
-    const cache = this.storageAlertCache[product];
-    cache.latestRatio = ratio * 100;
-    const label = this._formatProductLabel(product);
-
-    if (ratio >= 0.92) {
-      const severity = ratio > 0.98 ? "danger" : "warning";
-      if (!cache.highActive || cache.highSeverity !== severity) {
-        cache.highActive = true;
-        cache.highSeverity = severity;
-        cache.highTime = this._formatTime();
-        const message =
-          severity === "danger"
-            ? `${label} tank farm is overflowing at ${Math.round(ratio * 100)}% capacity.`
-            : `${label} tanks at ${Math.round(ratio * 100)}% capacity.`;
-        this.pushLog(
-          severity === "danger" ? "danger" : "warning",
-          `${message} Expedite shipments or cut crude charge.`,
-          { product }
-        );
-      }
-    } else if (cache.highActive && ratio <= 0.86) {
-      cache.highActive = false;
-      cache.highSeverity = "warning";
-      cache.highTime = "";
-      this.pushLog("info", `${label} storage relieved below 86%.`, { product });
-    }
-
-    if (ratio <= 0.14) {
-      const severity = ratio < 0.07 ? "danger" : "warning";
-      if (!cache.lowActive || cache.lowSeverity !== severity) {
-        cache.lowActive = true;
-        cache.lowSeverity = severity;
-        cache.lowTime = this._formatTime();
-        const message =
-          severity === "danger"
-            ? `${label} tanks nearly drained (${Math.round(ratio * 100)}%).`
-            : `${label} storage running thin at ${Math.round(ratio * 100)}%.`;
-        this.pushLog(
-          severity === "danger" ? "danger" : "warning",
-          `${message} Increase production or redirect supply.`,
-          { product }
-        );
-      }
-    } else if (cache.lowActive && ratio >= 0.2) {
-      cache.lowActive = false;
-      cache.lowSeverity = "warning";
-      cache.lowTime = "";
-      this.pushLog("info", `${label} storage recovered above 20%.`, { product });
-    }
-  }
-
   _formatProductLabel(product) {
     const label = PRODUCT_LABELS[product] || product;
     return label
@@ -2559,242 +1788,21 @@ export class RefinerySimulation {
     };
   }
 
+  // Delegated Logistics Methods
   dispatchLogisticsConvoy() {
-    if (this.logisticsRushCooldown > 0.1) {
-      const waitHours = Math.max(1, Math.round(this.logisticsRushCooldown));
-      this.pushLog(
-        "warning",
-        `Convoy already mobilized — wait ~${waitHours} h for crews to reset.`
-      );
-      return false;
-    }
-
-    const storage = this.storage;
-    if (!storage?.levels) {
-      this.pushLog("info", "Storage data unavailable; convoy dispatch skipped.");
-      return false;
-    }
-
-    let targetProduct = null;
-    let highestRatio = 0;
-    Object.entries(storage.levels).forEach(([product, level]) => {
-      const capacity = storage.capacity?.[product] || 0;
-      if (!capacity) {
-        return;
-      }
-      const ratio = clamp(level / capacity, 0, 1.2);
-      if (ratio > highestRatio) {
-        highestRatio = ratio;
-        targetProduct = product;
-      }
-    });
-
-    if (!targetProduct || highestRatio < 0.35) {
-      this.logisticsRushCooldown = Math.max(this.logisticsRushCooldown, 2);
-      this.pushLog("info", "Tanks are already comfortable — no need for a convoy right now.");
-      return false;
-    }
-
-    const capacity = storage.capacity[targetProduct] || 0;
-    const level = storage.levels[targetProduct] || 0;
-    const reliefFraction = Math.min(0.28, 0.14 + highestRatio * 0.24);
-    const relief = Math.min(level, capacity * reliefFraction);
-    if (relief <= 0) {
-      this.pushLog("info", "Convoy stood down — nothing available to move.");
-      return false;
-    }
-
-    // Instead of instant relief, we dispatch a convoy that drains over time
-    // storage.levels[targetProduct] = clamp(level - relief, 0, capacity);
-
-    const duration = 90; // minutes
-    const convoy = {
-       id: `convoy-${Date.now()}`,
-       product: targetProduct,
-       totalVolume: relief,
-       remainingVolume: relief,
-       duration: duration,
-       elapsed: 0
-    };
-    this.activeConvoys.push(convoy);
-
-    const label = this._formatProductLabel(targetProduct);
-    this.pendingOperationalCost += 260 + relief * 1.6;
-    this.nextShipmentIn = Math.min(this.nextShipmentIn, 1.05);
-    this.logisticsRushCooldown = 6;
-    this._relieveStoragePressure(0.18);
-
-    const rushDueIn = Math.min(Math.max(2.5, this.nextShipmentIn || 6), 6.5);
-    this._scheduleShipment({
-      product: targetProduct,
-      dueIn: rushDueIn,
-      rush: true,
-    });
-
-    this.pushLog(
-      "info",
-      `Convoy dispatched to clear ${relief.toFixed(0)} kb of ${label} over ${Math.round(duration/60*10)/10}h.`,
-      { product: targetProduct }
-    );
-    return { product: targetProduct, volume: relief, active: true };
+    return this.logisticsSystem.dispatchLogisticsConvoy();
   }
 
-  delayNextShipment({ product } = {}) {
-    const candidates = this.shipments
-      .filter(
-        (shipment) =>
-          shipment &&
-          shipment.status === "pending" &&
-          !shipment.rush &&
-          (typeof product === "string" ? shipment.product === product : true)
-      )
-      .sort((a, b) => (a.dueIn ?? Infinity) - (b.dueIn ?? Infinity));
-
-    const target = candidates[0];
-    if (!target) {
-      this.pushLog("info", "No standard shipments available to delay.");
-      return false;
-    }
-
-    const nowDue = Number.isFinite(target.dueIn) ? Math.max(0.1, target.dueIn) : 2.5;
-    const baseWindow = Math.max(1.5, target.window || 6);
-    const delayHours = clamp(Math.max(4, baseWindow * 0.4), 4, 10);
-    const maxSlack = Math.max(6, baseWindow * 1.2);
-    const newDue = Math.min(nowDue + delayHours, nowDue + maxSlack);
-
-    if (newDue <= nowDue + 0.2) {
-      this.pushLog("info", "Dock already allotted maximum slack for that charter.");
-      return false;
-    }
-
-    target.dueIn = newDue;
-    target.window = Math.max(target.window || newDue, newDue + Math.max(1.5, delayHours * 0.35));
-    target.rescheduledAt = this.timeMinutes;
-
-    this.pendingOperationalCost += delayHours * 18;
-    this._updateNextShipmentCountdown();
-    this._ensureScheduledShipments(this.shipmentHorizonHours);
-
-    const label = this._formatProductLabel(target.product);
-    this.pushLog(
-      "info",
-      `Delayed ${label} charter by ${delayHours.toFixed(1)} h to rebalance inventories.`,
-      { product: target.product }
-    );
-
-    return { product: target.product, delay: delayHours, dueIn: target.dueIn };
+  delayNextShipment(options) {
+    return this.logisticsSystem.delayNextShipment(options);
   }
 
   requestExtraShipment() {
-    if (this.extraShipmentCooldown > 0.1) {
-      const waitHours = Math.max(1, Math.round(this.extraShipmentCooldown));
-      this.pushLog(
-        "info",
-        `Expedite crews already en route — try again in ~${waitHours} h.`
-      );
-      return false;
-    }
-
-    if (!this.storage?.levels) {
-      this.pushLog("info", "Storage data unavailable; request skipped.");
-      return false;
-    }
-
-    let targetProduct = null;
-    let highestRatio = 0;
-    Object.entries(this.storage.levels).forEach(([product, level]) => {
-      const capacity = this.storage.capacity?.[product] || 0;
-      if (!capacity) {
-        return;
-      }
-      const ratio = capacity ? clamp(level / capacity, 0, 1.2) : 0;
-      if (ratio > highestRatio) {
-        highestRatio = ratio;
-        targetProduct = product;
-      }
-    });
-
-    if (!targetProduct) {
-      this.pushLog("info", "No product selected for emergency shipment.");
-      return false;
-    }
-
-    if (highestRatio < 0.55) {
-      this.pushLog("info", "Tanks are manageable — emergency charter not approved.");
-      return false;
-    }
-
-    const capacity = this.storage.capacity[targetProduct] || 0;
-    const level = this.storage.levels[targetProduct] || 0;
-    if (level <= 0) {
-      this.pushLog("info", "No inventory available to stage an emergency shipment.");
-      return false;
-    }
-
-    const urgency = clamp((highestRatio - 0.55) / 0.45, 0, 1);
-    const deliveryWindow = Math.max(0.8, randomRange(1.0, 1.6) * (1 - urgency * 0.35));
-    const dueIn = Math.max(0.25, randomRange(0.35, 0.9) * (1 - urgency * 0.3));
-    const volume = Math.min(level, capacity * clamp(0.12 + urgency * 0.24, 0.12, 0.34));
-
-    const shipment = this._registerShipment({
-      product: targetProduct,
-      volume,
-      deliveryWindow,
-      dueIn,
-      rush: true,
-      autoplan: false,
-    });
-    if (!shipment) {
-      this.pushLog("warning", "Unable to stage emergency charter; scheduling failed.");
-      return false;
-    }
-
-    const cost = 420 + volume * 2.4;
-    this.pendingOperationalCost += cost;
-    this.extraShipmentCooldown = 4;
-    this._relieveStoragePressure(0.1);
-
-    const label = this._formatProductLabel(targetProduct);
-    this.pushLog(
-      "info",
-      `Emergency charter staged: ${volume.toFixed(0)} kb of ${label} loading in ~${shipment.dueIn.toFixed(
-        1
-      )} h (cost $${cost.toFixed(0)}k).`
-    );
-
-    return { product: targetProduct, volume, dueIn: shipment.dueIn, cost };
+    return this.logisticsSystem.requestExtraShipment();
   }
 
   expandStorageCapacity() {
-    const level = this.storageUpgrades?.level || 0;
-    if (level >= 6) {
-      this.pushLog("info", "Tank farm already at maximum planned expansion.");
-      return false;
-    }
-
-    const growth = clamp(0.08 + level * 0.02, 0.08, 0.18);
-    const cost = 680 + level * 340;
-
-    Object.entries(this.storage.capacity).forEach(([product, capacity]) => {
-      const newCapacity = capacity * (1 + growth);
-      this.storage.capacity[product] = newCapacity;
-      if (this.storage.levels[product] > newCapacity) {
-        this.storage.levels[product] = newCapacity;
-      }
-    });
-
-    this.pendingOperationalCost += cost;
-    this.storageUpgrades.level = level + 1;
-    this._relieveStoragePressure(0.22);
-
-    this.pushLog(
-      "info",
-      `Construction staged — tank farm capacity up ${(growth * 100).toFixed(0)}% (cost $${cost.toFixed(
-        0
-      )}k).`
-    );
-
-    return { level: this.storageUpgrades.level, growth, cost };
+    return this.logisticsSystem.expandStorageCapacity();
   }
 
   togglePerformanceRecording() {
@@ -3012,7 +2020,7 @@ export class RefinerySimulation {
 
   getActionToysState() {
       return {
-          convoys: this.activeConvoys,
+          convoys: this.logisticsSystem.activeConvoys,
           inspections: this.activeInspections
       };
   }
@@ -3304,65 +2312,11 @@ export class RefinerySimulation {
   }
 
   getLogisticsState() {
-    return {
-      storage: {
-        capacity: { ...this.storage.capacity },
-        levels: { ...this.storage.levels },
-        baseCapacity: { ...(this.storageBaseCapacity || this.storage.capacity) },
-      },
-      shipments: this.shipments.map((shipment) => ({ ...shipment })),
-      stats: { ...this.shipmentStats },
-      convoyCooldown: this.logisticsRushCooldown,
-      nextShipmentIn: Math.max(0, this.nextShipmentIn),
-      pressure: this.storagePressure ? { ...this.storagePressure } : { active: false, throttle: 1, timer: 0 },
-      extraShipmentCooldown: this.extraShipmentCooldown || 0,
-      upgrades: { ...this.storageUpgrades },
-      alerts: this.getStorageAlerts(),
-      inventory: {
-        levels: { ...this.storage.levels },
-        capacity: { ...this.storage.capacity },
-      },
-    };
+    return this.logisticsSystem.getLogisticsState();
   }
 
   getStorageAlerts() {
-    const alerts = [];
-    if (!this.storageAlertCache) {
-      return alerts;
-    }
-    Object.entries(this.storageAlertCache).forEach(([product, cache]) => {
-      const capacity = this.storage.capacity[product] || 0;
-      const level = this.storage.levels[product] || 0;
-      const ratio = capacity ? clamp(level / capacity, 0, 1.2) : 0;
-      const label = this._formatProductLabel(product);
-      if (cache.highActive) {
-        alerts.push({
-          type: "storage",
-          product,
-          label,
-          severity: cache.highSeverity || "warning",
-          summary: cache.highSeverity === "danger" ? "Tanks critical" : "Tanks near capacity",
-          detail: `${label} storage at ${Math.round(ratio * 100)}% (${level.toFixed(0)} / ${capacity.toFixed(0)} kb).`,
-          guidance: "Schedule exports or trim crude rates to relieve pressure.",
-          recordedAt: cache.highTime,
-          percent: ratio * 100,
-        });
-      }
-      if (cache.lowActive) {
-        alerts.push({
-          type: "storage",
-          product,
-          label,
-          severity: cache.lowSeverity || "warning",
-          summary: cache.lowSeverity === "danger" ? "Tanks nearly empty" : "Tanks running low",
-          detail: `${label} tanks at ${Math.round(ratio * 100)}% (${level.toFixed(0)} / ${capacity.toFixed(0)} kb).`,
-          guidance: "Boost production, delay the next charter, or call an emergency shipment until inventory recovers.",
-          recordedAt: cache.lowTime,
-          percent: ratio * 100,
-        });
-      }
-    });
-    return alerts;
+    return this.logisticsSystem.getStorageAlerts();
   }
 
   getActiveAlerts() {
@@ -3472,27 +2426,27 @@ export class RefinerySimulation {
       scenario: this.activeScenarioKey,
       metrics: { ...this.metrics },
       flows: { ...this.flows },
-      marketStress: this.marketStress,
+      marketStress: this.marketSystem.marketStress,
       pendingOperationalCost: this.pendingOperationalCost,
-      logisticsRushCooldown: this.logisticsRushCooldown,
-      nextShipmentIn: this.nextShipmentIn,
+      logisticsRushCooldown: this.logisticsSystem.logisticsRushCooldown,
+      nextShipmentIn: this.logisticsSystem.nextShipmentIn,
       emergencyShutdown: this.emergencyShutdown,
       storage: {
-        capacity: { ...this.storage.capacity },
-        levels: { ...this.storage.levels },
-        baseCapacity: { ...(this.storageBaseCapacity || this.storage.capacity) },
+        capacity: { ...this.logisticsSystem.storage.capacity },
+        levels: { ...this.logisticsSystem.storage.levels },
+        baseCapacity: { ...(this.logisticsSystem.storageBaseCapacity || this.logisticsSystem.storage.capacity) },
       },
-      storageAlerts: clone(this.storageAlertCache),
-      shipments: this.shipments.map((shipment) => ({ ...shipment })),
-      shipmentStats: { ...this.shipmentStats },
+      storageAlerts: clone(this.logisticsSystem.storageAlertCache),
+      shipments: this.logisticsSystem.shipments.map((shipment) => ({ ...shipment })),
+      shipmentStats: { ...this.logisticsSystem.shipmentStats },
       pipelineBoosts: clone(this.pipelineBoosts),
       unitOverrides: this.getUnitOverrides(),
       units,
       recorder: this.getRecorderState(),
       lastRecordingSummary: this.lastRecordingSummary ? { ...this.lastRecordingSummary } : null,
-      storagePressure: this.storagePressure ? { ...this.storagePressure } : null,
-      extraShipmentCooldown: this.extraShipmentCooldown,
-      storageUpgrades: this.storageUpgrades ? { ...this.storageUpgrades } : null,
+      storagePressure: this.logisticsSystem.storagePressure ? { ...this.logisticsSystem.storagePressure } : null,
+      extraShipmentCooldown: this.logisticsSystem.extraShipmentCooldown,
+      storageUpgrades: this.logisticsSystem.storageUpgrades ? { ...this.logisticsSystem.storageUpgrades } : null,
       directives: this.directives.map((directive) => ({ ...directive })),
       directiveStats: { ...this.directiveStats },
       performanceHistory: this.performanceHistory.map((entry) => ({ ...entry })),
@@ -3540,156 +2494,23 @@ export class RefinerySimulation {
       this.activeScenario = this.scenarios[this.activeScenarioKey];
     }
 
-    if (!this.storage) {
-      this.storage = this._initStorage();
-    }
-    if (!this.storageAlertCache) {
-      this.storageAlertCache = this._createStorageAlertCache();
-    }
+    // Restore Systems
+    this.marketSystem.restoreState(snapshot, this.timeMinutes);
+    this.market = this.marketSystem.state;
 
-    if (snapshot.storage && typeof snapshot.storage === "object") {
-      if (snapshot.storage.capacity && typeof snapshot.storage.capacity === "object") {
-        Object.entries(snapshot.storage.capacity).forEach(([product, capacity]) => {
-          if (typeof capacity === "number" && Number.isFinite(capacity) && capacity > 0) {
-            this.storage.capacity[product] = capacity;
-          }
-        });
-      }
+    this.logisticsSystem.restoreState(snapshot);
+    this.storage = this.logisticsSystem.storage;
+    this.shipments = this.logisticsSystem.shipments;
 
-      if (snapshot.storage.levels && typeof snapshot.storage.levels === "object") {
-        Object.entries(snapshot.storage.levels).forEach(([product, level]) => {
-          if (typeof level !== "number" || !Number.isFinite(level)) {
-            return;
-          }
-          const capacity = this.storage.capacity[product] || 0;
-          const clampMax = capacity || Math.max(level, 0);
-          this.storage.levels[product] = clamp(level, 0, clampMax);
-        });
-      }
-
-      if (snapshot.storage.baseCapacity && typeof snapshot.storage.baseCapacity === "object") {
-        this.storageBaseCapacity = { ...snapshot.storage.baseCapacity };
-      }
-    }
-
-    if (!this.storageBaseCapacity) {
-      this.storageBaseCapacity = { ...this.storage.capacity };
-    }
-
-    this.storageAlertCache = this._createStorageAlertCache();
-    if (snapshot.storageAlerts && typeof snapshot.storageAlerts === "object") {
-      Object.entries(snapshot.storageAlerts).forEach(([product, cache]) => {
-        if (!cache || typeof cache !== "object") {
-          return;
-        }
-        if (!this.storageAlertCache[product]) {
-          this.storageAlertCache[product] = { ...cache };
-        } else {
-          this.storageAlertCache[product] = {
-            ...this.storageAlertCache[product],
-            ...cache,
-          };
-        }
-      });
-    }
+    // ...
 
     this.metrics = { ...this.metrics, ...(snapshot.metrics || {}) };
     this.flows = { ...this.flows, ...(snapshot.flows || {}) };
-
-    if (snapshot.market && typeof snapshot.market === "object") {
-      const restored = this._initMarketState();
-      if (snapshot.market.futures && typeof snapshot.market.futures === "object") {
-        Object.entries(snapshot.market.futures).forEach(([product, value]) => {
-          if (typeof value === "number" && Number.isFinite(value)) {
-            restored.futures[product] = value;
-          }
-        });
-      }
-      if (snapshot.market.productionCost && typeof snapshot.market.productionCost === "object") {
-        Object.entries(snapshot.market.productionCost).forEach(([product, value]) => {
-          if (typeof value === "number" && Number.isFinite(value)) {
-            restored.productionCost[product] = value;
-          }
-        });
-      }
-      if (snapshot.market.basis && typeof snapshot.market.basis === "object") {
-        Object.entries(snapshot.market.basis).forEach(([product, value]) => {
-          if (typeof value === "number" && Number.isFinite(value)) {
-            restored.basis[product] = value;
-          }
-        });
-      }
-      this.market = restored;
-    } else {
-      this.market = this._initMarketState();
-    }
-
-    if (this.market) {
-      this.metrics.futuresGasoline = this.market.futures.gasoline;
-      this.metrics.futuresDiesel = this.market.futures.diesel;
-      this.metrics.futuresJet = this.market.futures.jet;
-      this.metrics.costGasoline = this.market.productionCost.gasoline;
-      this.metrics.costDiesel = this.market.productionCost.diesel;
-      this.metrics.costJet = this.market.productionCost.jet;
-      this.metrics.basisGasoline = this.market.basis.gasoline;
-      this.metrics.basisDiesel = this.market.basis.diesel;
-      this.metrics.basisJet = this.market.basis.jet;
-    }
-
-    if (typeof snapshot.marketStress === "number" && Number.isFinite(snapshot.marketStress)) {
-      this.marketStress = clamp(snapshot.marketStress, 0, 1);
-    }
 
     this.pendingOperationalCost =
       typeof snapshot.pendingOperationalCost === "number" && Number.isFinite(snapshot.pendingOperationalCost)
         ? snapshot.pendingOperationalCost
         : 0;
-
-    this.logisticsRushCooldown =
-      typeof snapshot.logisticsRushCooldown === "number" && Number.isFinite(snapshot.logisticsRushCooldown)
-        ? Math.max(0, snapshot.logisticsRushCooldown)
-        : 0;
-
-    this.nextShipmentIn =
-      typeof snapshot.nextShipmentIn === "number" && Number.isFinite(snapshot.nextShipmentIn)
-        ? Math.max(0, snapshot.nextShipmentIn)
-        : this.nextShipmentIn;
-
-    if (snapshot.storagePressure && typeof snapshot.storagePressure === "object") {
-      this.storagePressure = {
-        active: Boolean(snapshot.storagePressure.active),
-        throttle:
-          typeof snapshot.storagePressure.throttle === "number"
-            ? clamp(snapshot.storagePressure.throttle, 0.45, 1)
-            : 1,
-        timer:
-          typeof snapshot.storagePressure.timer === "number" && Number.isFinite(snapshot.storagePressure.timer)
-            ? Math.max(0, snapshot.storagePressure.timer)
-            : 0,
-        lastRatio:
-          typeof snapshot.storagePressure.lastRatio === "number"
-            ? clamp(snapshot.storagePressure.lastRatio, 0, 1.2)
-            : 0,
-      };
-    } else {
-      this.storagePressure = { active: false, throttle: 1, timer: 0, lastRatio: 0 };
-    }
-
-    this.extraShipmentCooldown =
-      typeof snapshot.extraShipmentCooldown === "number" && Number.isFinite(snapshot.extraShipmentCooldown)
-        ? Math.max(0, snapshot.extraShipmentCooldown)
-        : 0;
-
-    if (snapshot.storageUpgrades && typeof snapshot.storageUpgrades === "object") {
-      this.storageUpgrades = {
-        level:
-          typeof snapshot.storageUpgrades.level === "number" && Number.isFinite(snapshot.storageUpgrades.level)
-            ? Math.max(0, Math.round(snapshot.storageUpgrades.level))
-            : 0,
-      };
-    } else {
-      this.storageUpgrades = { level: 0 };
-    }
 
     if (snapshot.recorder && typeof snapshot.recorder === "object") {
       const restored = this._createRecorderState();
@@ -3779,69 +2600,6 @@ export class RefinerySimulation {
     } else {
       this.pipelineBoosts = {};
     }
-
-    if (Array.isArray(snapshot.shipments)) {
-      this.shipments = snapshot.shipments.map((shipment, index) => {
-        const id =
-          typeof shipment.id === "string" && shipment.id
-            ? shipment.id
-            : `snapshot-ship-${index}-${Math.random().toString(16).slice(2, 6)}`;
-        const product = shipment.product || "gasoline";
-        const volume =
-          typeof shipment.volume === "number" && Number.isFinite(shipment.volume) ? shipment.volume : 0;
-        const window =
-          typeof shipment.window === "number" && Number.isFinite(shipment.window) ? shipment.window : 0;
-        const dueIn =
-          typeof shipment.dueIn === "number" && Number.isFinite(shipment.dueIn)
-            ? shipment.dueIn
-            : window;
-        const status =
-          shipment.status === "completed" || shipment.status === "missed" || shipment.status === "pending"
-            ? shipment.status
-            : "pending";
-        const createdAt =
-          typeof shipment.createdAt === "number" && Number.isFinite(shipment.createdAt)
-            ? shipment.createdAt
-            : this.timeMinutes;
-        const cooldown =
-          typeof shipment.cooldown === "number" && Number.isFinite(shipment.cooldown)
-            ? Math.max(0, shipment.cooldown)
-            : 0;
-        const record = {
-          id,
-          product,
-          volume,
-          window,
-          dueIn,
-          status,
-          createdAt,
-          cooldown,
-        };
-        if (typeof shipment.completedAt === "number" && Number.isFinite(shipment.completedAt)) {
-          record.completedAt = shipment.completedAt;
-        }
-        if (typeof shipment.shortage === "number" && Number.isFinite(shipment.shortage)) {
-          record.shortage = Math.max(0, shipment.shortage);
-        }
-        return record;
-      });
-    } else {
-      this.shipments = [];
-    }
-
-    if (snapshot.shipmentStats && typeof snapshot.shipmentStats === "object") {
-      const { total, onTime, missed } = snapshot.shipmentStats;
-      this.shipmentStats = {
-        total: typeof total === "number" && Number.isFinite(total) ? Math.max(0, total) : 0,
-        onTime: typeof onTime === "number" && Number.isFinite(onTime) ? Math.max(0, onTime) : 0,
-        missed: typeof missed === "number" && Number.isFinite(missed) ? Math.max(0, missed) : 0,
-      };
-    } else {
-      this.shipmentStats = { total: 0, onTime: 0, missed: 0 };
-    }
-
-    this._updateNextShipmentCountdown();
-    this._ensureScheduledShipments(this.shipmentHorizonHours);
 
     this.units.forEach((unit) => {
       unit.throughput = 0;

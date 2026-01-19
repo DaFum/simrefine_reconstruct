@@ -167,7 +167,7 @@ function j(t,e){for(var n,r=[],i=t;(n=C(i))&&i!==e&&n!==i.ownerDocument;)r.unshi
  * @param {Element} n - Die Abbruchgrenze; die Suche endet, sobald dieses Element erreicht wurde (inklusive).
  * @returns {boolean} `true` wenn `t` oder ein Vorfahre bis `n` den Selektor erfüllt, `false` sonst.
  */
-function F(t,e,n){for(;w.element(t);){if(R(t,e))return!0;if((t=A(t))===n)return R(t,e)}return!1}/ **
+function F(t,e,n){for(;w.element(t);){if(R(t,e))return!0;if((t=A(t))===n)return R(t,e)}return!1}/**
  * Liefert das zugehörige `use`-Element eines Elements, falls vorhanden, sonst das übergebene Element.
  * @param {Element|Object} t - Ein DOM-Element oder ein Objekt, das ggf. die Eigenschaft `correspondingUseElement` enthält.
  * @returns {Element|Object} `t.correspondingUseElement`, falls definiert, sonst `t`.
