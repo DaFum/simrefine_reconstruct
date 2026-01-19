@@ -1,28 +1,45 @@
 import { MISSIONS } from "./content/missions.js";
 import { MarketSystem } from "./systems/MarketSystem.js";
 import { LogisticsSystem } from "./systems/LogisticsSystem.js";
-
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-const randomRange = (min, max) => min + Math.random() * (max - min);
-
-const PRODUCT_LABELS = {
-  gasoline: "gasoline",
-  diesel: "diesel",
-  jet: "jet fuel",
-};
-
-const HOURS_PER_DAY = 24;
-const perDayToPerHour = (value) => value / HOURS_PER_DAY;
-const perHourToPerDay = (value) => value * HOURS_PER_DAY;
-
-const SHIPMENT_PARCEL_SIZES = {
-  gasoline: 44,
-  diesel: 36,
-  jet: 30,
-};
-
-const SHIPMENT_HORIZON_HOURS = 48;
-const BASE_CRUDE_THROUGHPUT = 120;
+import {
+  PRODUCT_LABELS,
+  HOURS_PER_DAY,
+  SHIPMENT_PARCEL_SIZES,
+  SHIPMENT_HORIZON_HOURS,
+  BASE_CRUDE_THROUGHPUT,
+  BASE_PRICES,
+  SCENARIOS,
+  UNIT_DEFINITIONS,
+  SPEED_PRESETS,
+  DEFAULT_PARAMS,
+} from "./simulation/constants.js";
+import {
+  clamp,
+  randomRange,
+  perDayToPerHour,
+  perHourToPerDay,
+  round,
+  calculateDistillationShares,
+  calculateEffectiveCapacity,
+  updateUnitMetrics,
+  calculateEnvironmentPenalty,
+  calculateProductPrices,
+  calculateProductRevenue,
+  applyStrainPenalties,
+  capLiquidProducts,
+} from "./simulation/utils/calculations.js";
+import {
+  deepClone,
+  sanitizeNumber,
+  restoreRecorderState,
+  restorePipelineBoosts,
+  restoreUnitState,
+  restoreUnitOverrides,
+  restoreDirectiveStats,
+  restoreLogs,
+  restorePerformanceHistory,
+  createUnitsSnapshot,
+} from "./simulation/utils/snapshot.js";
 
 export class RefinerySimulation {
   constructor(eventBus = null) {
@@ -35,26 +52,14 @@ export class RefinerySimulation {
     this.minSpeedMultiplier = 0.25;
     this.maxSpeedMultiplier = 4;
     this.speed = this.baseSpeed * this.speedMultiplier;
-    this.speedPresets = [
-      { label: "0.25x", value: 0.25 },
-      { label: "0.5x", value: 0.5 },
-      { label: "1x", value: 1 },
-      { label: "2x", value: 2 },
-      { label: "4x", value: 4 },
-    ];
+    this.speedPresets = SPEED_PRESETS;
     this._accumulator = 0;
     this.running = true;
     this.stepOnce = false;
 
     this.logs = [];
 
-    this.params = {
-      crudeIntake: 120, // kbpd
-      productFocus: 0.5, // 0 diesel, 1 gasoline
-      maintenance: 0.65,
-      safety: 0.45,
-      environment: 0.35,
-    };
+    this.params = { ...DEFAULT_PARAMS };
 
     this.scenarios = this._createScenarios();
     this.activeScenarioKey = "steady";
@@ -197,108 +202,13 @@ export class RefinerySimulation {
   set storageUpgrades(val) { this.logisticsSystem.storageUpgrades = val; }
 
   _createScenarios() {
-    return {
-      steady: {
-        key: "steady",
-        name: "Steady Operations",
-        description: "Balanced demand and average Bay Area crude quality.",
-        crudeMultiplier: 1,
-        qualityShift: 0,
-        priceModifier: 1,
-        gasolineBias: 0,
-        dieselBias: 0,
-        jetBias: 0,
-        riskMultiplier: 1,
-        maintenancePenalty: 0,
-        environmentPressure: 0.2,
-      },
-      summerRush: {
-        key: "summerRush",
-        name: "Summer Driving Rush",
-        description:
-          "Gasoline demand surges with tourist traffic. Lighter crudes are available but the plant runs hot.",
-        crudeMultiplier: 1.05,
-        qualityShift: -0.05,
-        priceModifier: 1.08,
-        gasolineBias: 0.24,
-        dieselBias: -0.12,
-        jetBias: -0.05,
-        riskMultiplier: 1.12,
-        maintenancePenalty: 0.05,
-        environmentPressure: 0.1,
-      },
-      winterDiesel: {
-        key: "winterDiesel",
-        name: "Winter Heating Demand",
-        description:
-          "Heating oil and diesel spike while heavy, sour crude dominates supply.",
-        crudeMultiplier: 0.95,
-        qualityShift: 0.08,
-        priceModifier: 1.02,
-        gasolineBias: -0.1,
-        dieselBias: 0.28,
-        jetBias: -0.04,
-        riskMultiplier: 1.2,
-        maintenancePenalty: 0.12,
-        environmentPressure: 0.28,
-      },
-      exportPush: {
-        key: "exportPush",
-        name: "Pacific Jet Fuel Push",
-        description:
-          "Airlines pre-buy jet fuel for Pacific routes. Margins improve for kerosene and hydrogen-hungry units.",
-        crudeMultiplier: 1,
-        qualityShift: -0.02,
-        priceModifier: 1.06,
-        gasolineBias: -0.04,
-        dieselBias: -0.08,
-        jetBias: 0.32,
-        riskMultiplier: 1.15,
-        maintenancePenalty: 0.08,
-        environmentPressure: 0.18,
-      },
-      maintenanceCrunch: {
-        key: "maintenanceCrunch",
-        name: "Deferred Maintenance",
-        description:
-          "Budget cuts delayed turnarounds. Equipment is fragile and utilities are strained.",
-        crudeMultiplier: 0.9,
-        qualityShift: 0.05,
-        priceModifier: 0.97,
-        gasolineBias: 0,
-        dieselBias: 0.05,
-        jetBias: 0,
-        riskMultiplier: 1.45,
-        maintenancePenalty: 0.3,
-        environmentPressure: 0.35,
-      },
-      quakeDrill: {
-        key: "quakeDrill",
-        name: "Earthquake Drill",
-        description:
-          "A simulated quake tests emergency response. Utilities cut, shipments disrupted, and accidents spike.",
-        crudeMultiplier: 0.82,
-        qualityShift: 0.12,
-        priceModifier: 1.11,
-        gasolineBias: -0.06,
-        dieselBias: 0.12,
-        jetBias: 0,
-        riskMultiplier: 1.85,
-        maintenancePenalty: 0.42,
-        environmentPressure: 0.42,
-      },
-    };
+    return SCENARIOS;
   }
 
   _createUnits() {
-    return [
-      this._unit("distillation", "Crude Distillation Unit", 180, "core"),
-      this._unit("reformer", "Naphtha Reformer", 60, "naphtha"),
-      this._unit("fcc", "Catalytic Cracker", 85, "conversion"),
-      this._unit("hydrocracker", "Hydrocracker", 65, "conversion"),
-      this._unit("alkylation", "Alkylation", 45, "finishing"),
-      this._unit("sulfur", "Sulfur Recovery", 35, "support"),
-    ];
+    return UNIT_DEFINITIONS.map((def) =>
+      this._unit(def.id, def.name, def.capacity, def.category)
+    );
   }
 
   _createTopology() {
@@ -873,18 +783,11 @@ export class RefinerySimulation {
       flare += diverted * 0.35;
     }
 
-    const basePrices = {
-      gasoline: 96,
-      diesel: 88,
-      jet: 112,
-      lpg: 54,
-    };
-
     const priceModifier = scenario.priceModifier;
-    const gasolinePrice = basePrices.gasoline * priceModifier * (1 + demandGasolineBias * 0.3);
-    const dieselPrice = basePrices.diesel * priceModifier * (1 + scenario.dieselBias * 0.25);
-    const jetPrice = basePrices.jet * priceModifier * (1 + demandJetBias * 0.35);
-    const lpgPrice = basePrices.lpg * priceModifier * (1 + demandGasolineBias * 0.1);
+    const gasolinePrice = BASE_PRICES.gasoline * priceModifier * (1 + demandGasolineBias * 0.3);
+    const dieselPrice = BASE_PRICES.diesel * priceModifier * (1 + scenario.dieselBias * 0.25);
+    const jetPrice = BASE_PRICES.jet * priceModifier * (1 + demandJetBias * 0.35);
+    const lpgPrice = BASE_PRICES.lpg * priceModifier * (1 + demandGasolineBias * 0.1);
 
     const crudeCostPerBbl = this.marketSystem.resolveCrudeCostPerBarrel(scenario);
     const maintenanceBudget =

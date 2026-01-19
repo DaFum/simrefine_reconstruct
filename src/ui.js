@@ -1,3 +1,15 @@
+import {
+  renderProductionMetrics,
+  renderFinancialMetrics,
+  renderReliabilityMetrics,
+  renderEconomy,
+  renderScorecard,
+  drawScoreTrend,
+  renderInventoryBar,
+  renderLogisticsControls,
+  renderStorageStatus,
+} from "./ui/renderers/index.js";
+
 const PRODUCT_LABELS = {
   gasoline: "Gasoline",
   diesel: "Diesel",
@@ -835,69 +847,7 @@ export class UIController {
   }
 
   _drawScoreTrend(history) {
-    const ctx = this.scoreTrendContext;
-    if (!ctx) return;
-    const { width, height } = ctx.canvas;
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "rgba(6, 12, 20, 0.75)";
-    ctx.fillRect(0, 0, width, height);
-
-    if (!history.length) {
-      return;
-    }
-
-    const min = Math.min(50, ...history);
-    const max = Math.max(95, ...history);
-    const range = Math.max(1, max - min);
-    const gutterX = 4;
-    const gutterY = 4;
-
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 4]);
-    const targetNormalized = (75 - min) / range;
-    const targetY = height - gutterY - targetNormalized * (height - gutterY * 2);
-    const clampedTargetY = Math.min(height - gutterY, Math.max(gutterY, targetY));
-    ctx.beginPath();
-    ctx.moveTo(gutterX, clampedTargetY);
-    ctx.lineTo(width - gutterX, clampedTargetY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const points = history.map((value, index) => {
-      const x =
-        gutterX +
-        (index / Math.max(1, history.length - 1)) * (width - gutterX * 2);
-      const normalized = (value - min) / range;
-      const y = height - gutterY - normalized * (height - gutterY * 2);
-      return { x, y };
-    });
-
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      if (index === 0) {
-        ctx.moveTo(point.x, point.y);
-      } else {
-        ctx.lineTo(point.x, point.y);
-      }
-    });
-    ctx.lineTo(points[points.length - 1].x, height - gutterY);
-    ctx.lineTo(points[0].x, height - gutterY);
-    ctx.closePath();
-    ctx.fillStyle = "rgba(88, 217, 149, 0.18)";
-    ctx.fill();
-
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      if (index === 0) {
-        ctx.moveTo(point.x, point.y);
-      } else {
-        ctx.lineTo(point.x, point.y);
-      }
-    });
-    ctx.strokeStyle = "#58d995";
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    drawScoreTrend(this.scoreTrendContext, history);
   }
 
   _renderLogistics(logistics) {
