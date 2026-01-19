@@ -1,14 +1,4 @@
-import {
-  renderProductionMetrics,
-  renderFinancialMetrics,
-  renderReliabilityMetrics,
-  renderEconomy,
-  renderScorecard,
-  drawScoreTrend,
-  renderInventoryBar,
-  renderLogisticsControls,
-  renderStorageStatus,
-} from "./ui/renderers/index.js";
+import { drawScoreTrend } from "./ui/renderers/index.js";
 
 const PRODUCT_LABELS = {
   gasoline: "Gasoline",

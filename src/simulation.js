@@ -1,45 +1,22 @@
 import { MISSIONS } from "./content/missions.js";
 import { MarketSystem } from "./systems/MarketSystem.js";
 import { LogisticsSystem } from "./systems/LogisticsSystem.js";
+import { SCENARIOS, UNIT_DEFINITIONS, SPEED_PRESETS, DEFAULT_PARAMS, BASE_PRICES } from "./simulation/constants.js";
+import { clamp, perDayToPerHour, perHourToPerDay } from "./simulation/utils/calculations.js";
 import {
-  PRODUCT_LABELS,
-  HOURS_PER_DAY,
-  SHIPMENT_PARCEL_SIZES,
-  SHIPMENT_HORIZON_HOURS,
-  BASE_CRUDE_THROUGHPUT,
-  BASE_PRICES,
-  SCENARIOS,
-  UNIT_DEFINITIONS,
-  SPEED_PRESETS,
-  DEFAULT_PARAMS,
-} from "./simulation/constants.js";
-import {
-  clamp,
-  randomRange,
-  perDayToPerHour,
-  perHourToPerDay,
-  round,
-  calculateDistillationShares,
-  calculateEffectiveCapacity,
-  updateUnitMetrics,
-  calculateEnvironmentPenalty,
-  calculateProductPrices,
-  calculateProductRevenue,
-  applyStrainPenalties,
-  capLiquidProducts,
-} from "./simulation/utils/calculations.js";
-import {
-  deepClone,
-  sanitizeNumber,
-  restoreRecorderState,
-  restorePipelineBoosts,
-  restoreUnitState,
-  restoreUnitOverrides,
-  restoreDirectiveStats,
-  restoreLogs,
-  restorePerformanceHistory,
-  createUnitsSnapshot,
-} from "./simulation/utils/snapshot.js";
+  calculateProductShares,
+  calculateEnvironmentMetrics,
+  shouldLogEnvironmentWarning,
+  getEnvironmentWarningSeverity,
+  formatEnvironmentWarning,
+} from "./simulation/processors/index.js";
+
+const PRODUCT_LABELS = { gasoline: "gasoline", diesel: "diesel", jet: "jet fuel" };
+const HOURS_PER_DAY = 24;
+const SHIPMENT_PARCEL_SIZES = { gasoline: 44, diesel: 36, jet: 30 };
+const SHIPMENT_HORIZON_HOURS = 48;
+const BASE_CRUDE_THROUGHPUT = 120;
+const randomRange = (min, max) => min + Math.random() * (max - min);
 
 export class RefinerySimulation {
   constructor(eventBus = null) {
@@ -556,45 +533,16 @@ export class RefinerySimulation {
       this._updateUnitMode(distillation);
     }
 
-    // Product Production Logic (remains in main class as it touches all units)
+    // Calculate product shares using processor
     const focus = clamp(this.params.productFocus, 0, 1);
-    const centered = focus - 0.5;
+    const shares = calculateProductShares(scenario, focus);
 
-    let gasShare = clamp(0.08 + centered * 0.05, 0.035, 0.16);
-    let naphthaShare = clamp(0.36 + centered * 0.25, 0.26, 0.55);
-    let keroseneShare = 0.11 + scenario.jetBias * 0.05;
-    let dieselShare = clamp(0.27 - centered * 0.14 + scenario.dieselBias * 0.06, 0.18, 0.36);
-    let heavyShare = clamp(0.17 - centered * 0.06, 0.11, 0.26);
-
-    let residShare = Math.max(
-      0.06,
-      1 - (gasShare + naphthaShare + keroseneShare + dieselShare + heavyShare)
-    );
-
-    const qualityShift = scenario.qualityShift;
-    if (qualityShift !== 0) {
-      const heavyAdjust = 1 + qualityShift;
-      naphthaShare *= 1 - 0.35 * qualityShift;
-      dieselShare *= 1 - 0.18 * qualityShift;
-      heavyShare *= heavyAdjust;
-      residShare *= heavyAdjust * 1.2;
-    }
-
-    const totalShares =
-      gasShare + naphthaShare + keroseneShare + dieselShare + heavyShare + residShare;
-    gasShare /= totalShares;
-    naphthaShare /= totalShares;
-    keroseneShare /= totalShares;
-    dieselShare /= totalShares;
-    heavyShare /= totalShares;
-    residShare /= totalShares;
-
-    const distGas = crudeThroughput * gasShare;
-    let naphthaPool = crudeThroughput * naphthaShare;
-    let kerosenePool = crudeThroughput * keroseneShare;
-    let dieselPool = crudeThroughput * dieselShare;
-    let heavyPool = crudeThroughput * heavyShare;
-    let residPool = crudeThroughput * residShare;
+    const distGas = crudeThroughput * shares.gas;
+    let naphthaPool = crudeThroughput * shares.naphtha;
+    let kerosenePool = crudeThroughput * shares.kerosene;
+    let dieselPool = crudeThroughput * shares.diesel;
+    let heavyPool = crudeThroughput * shares.heavy;
+    let residPool = crudeThroughput * shares.resid;
 
     const result = {
       gasoline: 0,
@@ -824,43 +772,28 @@ export class RefinerySimulation {
         scenario
     });
 
+    // Calculate environment metrics using processor
     const environmentLevel = clamp(this.params.environment ?? 0.35, 0, 1);
-    const carbonBase =
-      result.waste * 3.5 +
-      result.diesel * 0.6 +
-      result.gasoline * 0.5 +
-      incidentsRisk.incidents * 2.8;
-    const envMitigation = 1 - clamp(0.1 + environmentLevel * 0.55 + environmentLevel * environmentLevel * 0.32, 0, 0.88);
-    const carbonPerHour = carbonBase * envMitigation;
-    const carbonPerDay = perHourToPerDay(carbonPerHour);
-    const productionPerDay = perHourToPerDay(result.gasoline + result.diesel + result.jet);
-    const environmentTarget = clamp(
-      0.5 - environmentLevel * 0.28 + (scenario.environmentPressure || 0) * 0.05,
-      0.22,
-      0.55
-    );
-    const carbonIntensity = productionPerDay > 0 ? carbonPerDay / productionPerDay : carbonPerDay;
-    const envExcess = Math.max(0, carbonIntensity - environmentTarget);
-    let environmentPenalty = 0;
-    if (envExcess > 0) {
-      environmentPenalty = envExcess * productionPerDay * 9;
-      if (envExcess > 0.05) {
-        environmentPenalty *= 1.15;
-      }
-      const penaltySuppression = clamp(1 - environmentLevel * 1.05, 0, 1);
-      environmentPenalty *= penaltySuppression;
-    }
+    const envMetrics = calculateEnvironmentMetrics({
+      production: result,
+      incidents: incidentsRisk.incidents,
+      environmentLevel,
+      scenario,
+      crudeThroughput,
+    });
 
     if (this._environmentPenaltyCooldown > 0) {
       this._environmentPenaltyCooldown = Math.max(0, this._environmentPenaltyCooldown - hours);
     }
-    if (environmentPenalty > 4 && this._environmentPenaltyCooldown <= 0) {
+    if (shouldLogEnvironmentWarning(envMetrics.environmentPenalty, envMetrics.envExcess, this._environmentPenaltyCooldown)) {
       this.pushLog(
-        envExcess > 0.08 ? "warning" : "info",
-        `Environmental compliance drag: $${environmentPenalty.toFixed(1)}k this hour (intensity ${(carbonIntensity * 100).toFixed(1)}%).`
+        getEnvironmentWarningSeverity(envMetrics.envExcess),
+        formatEnvironmentWarning(envMetrics.environmentPenalty, envMetrics.carbonIntensity)
       );
       this._environmentPenaltyCooldown = 1.6;
     }
+    const environmentPenalty = envMetrics.environmentPenalty;
+    const carbonPerHour = envMetrics.carbonPerHour;
 
     let penalty = incidentsRisk.incidentPenalty + logisticsReport.penalty + environmentPenalty;
     const fixedOverhead = this.marketSystem.calculateFixedOverhead({
@@ -885,75 +818,12 @@ export class RefinerySimulation {
         timeMinutes: this.timeMinutes
     });
 
-    // Recalculate expenses based on market results
+    // Extract market results
     const marketConditions = marketResult.marketConditions;
     const economy = marketResult.economy;
-
     const adjustedRevenue = productRevenue * marketConditions.multiplier;
     const carryingCost = marketConditions.carryingCost;
     const totalOperatingExpense = operatingExpense + fixedOverhead + carryingCost + extraOperationalCost;
-
-    // MarketSystem update ran with "old" totalOperatingExpense if I passed it before calc?
-    // Actually `MarketSystem._updateEconomy` uses `totalOperatingExpense`.
-    // In original code:
-    // 1. Calc `marketConditions` (gives carryingCost).
-    // 2. Calc `totalOperatingExpense` using `carryingCost`.
-    // 3. Calc `economy` using `totalOperatingExpense`.
-    // My `MarketSystem.update` calls `_updateMarketConditions` then `_updateEconomy`.
-    // But `_updateEconomy` needs the correct `totalOperatingExpense`.
-    // I passed `totalOperatingExpense` to `update` but it was missing `carryingCost` at that point.
-    // I should probably pass `operatingExpense + fixedOverhead + extraOperationalCost` (partial) and let MarketSystem add carryingCost?
-    // OR just access `marketSystem.state` afterwards.
-
-    // Refinement: `MarketSystem.update` is doing too much or needs better args.
-    // For now, I'll stick to the original flow logic roughly:
-    // It seems `MarketSystem.update` uses `totalOperatingExpense` in `_updateEconomy`.
-    // I should fix `MarketSystem` to calculate `totalOperatingExpense` internally or expect the partial.
-    // BUT `MarketSystem` doesn't know about `extraOperationalCost` unless passed.
-
-    // Let's assume `MarketSystem.update` does its best.
-    // Wait, in `MarketSystem.js` I wrote: `const operationsPerBbl = ... totalOperatingExpense ...`.
-    // So it needs the full value.
-    // I will call `_updateMarketConditions` separately if I exposed it? No I exposed `update`.
-    // I will assume `MarketSystem` handles it...
-    // Actually, `MarketSystem` logic I wrote:
-    // `const marketConditions = this._updateMarketConditions(...)`
-    // `const economy = this._updateEconomy(..., totalOperatingExpense, ...)`
-    // The `totalOperatingExpense` passed to `update` is used in `_updateEconomy`.
-    // So I need to pass the FULL expense.
-    // But I don't know `carryingCost` until `_updateMarketConditions` runs!
-    // So I need to run `_updateMarketConditions` first, get cost, then run `_updateEconomy`.
-    // `MarketSystem` exposes `update` which does both.
-
-    // I should modify `MarketSystem` to calculate carrying cost inside `_updateEconomy`? No, `_updateEconomy` needs it.
-    // I will change `MarketSystem` to expose separate methods or fix `update`.
-    // Fixing `MarketSystem.js` would require another file write.
-    // Alternatively, I can call `update` twice? No that drifts state.
-
-    // Ideally I should have checked this dependency.
-    // Workaround: I will implement `_updateEconomy` locally again? No.
-    // I will modify `RefinerySimulation` to work around this if possible.
-    // Or I'll just accept that `carryingCost` might be from previous frame?
-    // No, `marketConditions` is calculated fresh.
-
-    // Let's re-read `MarketSystem.js` logic I wrote.
-    // `update(context)` -> calls `_updateMarketConditions`, then `_updateEconomy`.
-    // `_updateEconomy` uses `context.totalOperatingExpense`.
-    // `context` is passed ONCE.
-    // So `totalOperatingExpense` in `_updateEconomy` is what I passed.
-    // Whatever I pass must include `carryingCost`.
-    // But I don't know it yet.
-
-    // I must invoke `marketSystem.calculateMarketConditions(...)` (if it existed) -> get cost -> calc total -> invoke `marketSystem.updateEconomy(...)`.
-    // But I didn't expose those. I exposed `update`.
-
-    // I can modify `MarketSystem.js` to accept `baseOperatingExpense` and add `carryingCost` internally.
-    // Yes, that is the cleanest fix.
-    // I will plan to update `MarketSystem.js` after this file write.
-    // For now I will pass `operatingExpense + fixedOverhead + extraOperationalCost` as `baseOperatingExpense` in `context`.
-    // And in `MarketSystem`, I will change `totalOperatingExpense` usage to `base + carrying`.
-
-    // So in `RefinerySimulation`, I will pass `baseOperatingExpense`.
 
     const revenuePerHour = adjustedRevenue;
     const operatingExpensePerHour = totalOperatingExpense;
