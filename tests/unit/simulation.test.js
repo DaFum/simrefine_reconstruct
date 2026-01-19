@@ -131,13 +131,13 @@ describe('RefinerySimulation', () => {
   describe('Logistics', () => {
       it('should schedule new shipments', () => {
           const count = simulation.shipments.length;
-          simulation._scheduleShipment({ product: 'gasoline', dueIn: 5, volume: 50 });
+          simulation.logisticsSystem._scheduleShipment({ product: 'gasoline', dueIn: 5, volume: 50 });
           expect(simulation.shipments.length).toBe(count + 1);
       });
 
       it('should handle shipment completion', () => {
          // Create a shipment due immediately
-         const shipment = simulation._registerShipment({
+         const shipment = simulation.logisticsSystem._registerShipment({
              product: 'gasoline',
              dueIn: 0.1, // 6 minutes
              volume: 10
@@ -158,7 +158,7 @@ describe('RefinerySimulation', () => {
 
       it('should handle missed shipments', () => {
         // Create a shipment due immediately
-        const shipment = simulation._registerShipment({
+        const shipment = simulation.logisticsSystem._registerShipment({
             product: 'gasoline',
             dueIn: 0.1,
             volume: 1000 // More than capacity
