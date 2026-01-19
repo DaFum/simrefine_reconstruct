@@ -8,10 +8,11 @@
     "test:coverage": "vitest --coverage"
   },
   "devDependencies": {
-    "vitest": "^4.0.17",
-    "@vitest/ui": "^4.0.17",
+    "@playwright/test": "^1.57.0",
     "@vitest/coverage-v8": "^4.0.17",
+    "@vitest/ui": "^4.0.17",
+    "happy-dom": "^20.3.1",
     "jsdom": "^27.4.0",
-    "happy-dom": "^20.3.1"
+    "vitest": "^4.0.17"
   }
 }

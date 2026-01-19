@@ -19,6 +19,7 @@ export default defineConfig({
       ]
     },
     include: ['tests/**/*.test.js', 'tests/**/*.spec.js'],
+    exclude: ['tests/e2e/**', '**/node_modules/**', '**/dist/**', '**/cypress/**', '**/.{idea,git,cache,output,temp}/**'],
     maxWorkers: 1
   },
   resolve: {
