@@ -378,6 +378,7 @@ function wt(t,e){for(var n=0,r=t.slice();n<r.length;n++){var i=r[n],o=i.dropzone
  * @param {Object} t - Die Interact.js-Scope-Instanz, die die registrierten Interactables enthält.
  * @param {Element} e - Das zu prüfende (verschiebbare) Element.
  * @returns {Array<Object>} Eine Liste von Objekten, jeweils mit `dropzone` (Interactable), `element` (Element) und `rect` (Rechteck des Targets).
+ */
 function Et(t,e){for(var n=function(t,e){for(var n=[],r=0,i=t.interactables.list;r<i.length;r++){var o=i[r];if(o.options.drop.enabled){var a=o.options.drop.accept;if(!(w.element(a)&&a!==e||w.string(a)&&!R(e,a)||w.func(a)&&!a({dropzone:o,draggableElement:e})))for(var s=0,c=o.getAllElements();s<c.length;s++){var l=c[s];l!==e&&n.push({dropzone:o,element:l,rect:o.getRect(l)})}}}return n}(t,e),r=0;r<n.length;r++){var i=n[r];i.rect=i.dropzone.getRect(i.element)}return n}/**
  * Bestimmt das zutreffende Drop-Target aus den aktiven Drop-States für ein gegebenes Interaktionsziel.
  *
