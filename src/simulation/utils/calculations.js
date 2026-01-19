@@ -79,7 +79,6 @@ export function calculateEnvironmentPenalty(params) {
   const {
     result,
     incidentsCount,
-    crudeThroughput,
     environmentLevel,
     scenario,
   } = params;
