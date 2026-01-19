@@ -1,10 +1,9 @@
+import { clamp } from "../simulation/utils/calculations.js";
+
 /**
  * Market Calculations
  * Pure calculation functions for market system
  */
-
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-
 export const HOURS_PER_DAY = 24;
 export const perHourToPerDay = (value) => value * HOURS_PER_DAY;
 
