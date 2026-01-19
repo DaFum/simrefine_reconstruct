@@ -44,6 +44,10 @@ export class UIController {
       reliabilityOutput: document.getElementById("reliability-output"),
       strainOutput: document.getElementById("strain-output"),
       carbonOutput: document.getElementById("carbon-output"),
+      wasteOutput: document.getElementById("waste-output"),
+      flareOutput: document.getElementById("flare-output"),
+      incidentsOutput: document.getElementById("incidents-output"),
+      throughputOutput: document.getElementById("throughput-output"),
       gasolineFutures: document.getElementById("gasoline-futures"),
       dieselFutures: document.getElementById("diesel-futures"),
       jetFutures: document.getElementById("jet-futures"),
@@ -491,6 +495,14 @@ export class UIController {
     this._animateMetric(this.elements.dieselOutput, 'diesel', metrics.diesel, formatBpd);
     this._animateMetric(this.elements.jetOutput, 'jet', metrics.jet, formatBpd);
     this._animateMetric(this.elements.lpgOutput, 'lpg', metrics.lpg, formatBpd);
+    this._animateMetric(this.elements.wasteOutput, 'waste', metrics.waste || 0, formatBpd);
+
+    if (this.elements.flareOutput) {
+      const flare = Math.round((metrics.flareLevel || 0) * 100);
+      this.elements.flareOutput.textContent = `${flare}%`;
+      this.elements.flareOutput.classList.toggle("warning", flare > 15);
+      this.elements.flareOutput.classList.toggle("danger", flare > 40);
+    }
 
     // Animate Financials
     const profitVal = Math.round(metrics.profitPerHour * 1000);
@@ -526,6 +538,36 @@ export class UIController {
       this.elements.strainOutput.textContent = `${strainPct}%`;
       this.elements.strainOutput.classList.toggle("warning", strainPct >= 65);
     }
+
+    if (this.elements.incidentsOutput) {
+      this.elements.incidentsOutput.textContent = metrics.incidents || 0;
+      this.elements.incidentsOutput.classList.toggle("danger", (metrics.incidents || 0) > 0);
+    }
+
+    if (this.elements.throughputOutput) {
+        // Calculate utilization based on known base capacity
+        // Note: Simulation doesn't expose total capacity directly in metrics, so we approximate
+        // based on crude intake vs capacity or just sum of unit utilization?
+        // Let's use crude intake vs base capacity (120) for now or use the passed throttle.
+        const throttle = metrics.storageThrottle ?? 1;
+        const target = this.simulation.params.crudeIntake;
+        // Or better, sum of unit utilization / unit count?
+        // Actually, let's just use the crude intake param vs max as a proxy,
+        // OR better yet, ask simulation for it.
+        // Simulation metrics has `crudeThroughput` implicitly via production.
+        // Let's use the crude intake setting for now as "Utilization" of nameplate.
+        // Wait, `metrics.operationalStrain` is based on throughput.
+
+        // Let's calculate utilization from production vs crudeIntake
+        // Total products / crudeIntake?
+
+        // Actually, let's look at `metrics.storageUtilization` which exists.
+        // But for throughput, let's show crude intake relative to base 120kbpd
+        const intake = this.simulation.params.crudeIntake;
+        const util = Math.round((intake / 180) * 100); // 180 is max capacity of CDU
+        this.elements.throughputOutput.textContent = `${util}%`;
+    }
+
     this.elements.carbonOutput.textContent = `${metrics.carbon.toFixed(1)} tCO₂-eq`;
 
     this._renderEconomy(metrics);
