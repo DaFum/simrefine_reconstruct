@@ -2,9 +2,7 @@
  * Pipeline Configurations
  * Visual and routing configuration for refinery pipelines
  */
-
-const HOURS_PER_DAY = 24;
-
+import { HOURS_PER_DAY } from "../simulation/constants.js";
 export const PIPELINE_CONFIGS = [
   {
     id: "toReformer",
