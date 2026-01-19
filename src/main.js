@@ -1,6 +1,6 @@
-import { RefinerySimulation } from "./simulation.js?v=3";
-import { UIController } from "./ui.js?v=3";
-import { TileRenderer } from "./renderer3d.js?v=3";
+import { RefinerySimulation } from "./simulation.js";
+import { UIController } from "./ui.js";
+import { TileRenderer } from "./renderer3d.js";
 import { AudioController } from "./audio.js";
 import { EventBus } from "./eventBus.js";
 import { CommandSystem } from "./commandSystem.js";
