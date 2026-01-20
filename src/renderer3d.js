@@ -709,31 +709,31 @@ export class TileRenderer {
       });
 
       // Update Pipe Boosts
-      if (this.simulation.pipelineBoosts) {
-          const activeBoosts = new Set(Object.keys(this.simulation.pipelineBoosts));
-          // Apply active boosts
-          activeBoosts.forEach(key => {
-              const pipe = this.pipelineMeshes.get(key);
-              if (pipe) {
-                  // Pulse flow strongly
-                  pipe.glow.material.opacity = 0.5 + Math.sin(this.time * 10) * 0.4;
-                  pipe.glow.material.color.setHex(0xff00ff); // Purple boost color
-              }
-          });
+      const boosts = this.simulation.pipelineBoosts || {};
+      const activeBoosts = new Set(Object.keys(boosts));
 
-          // Restore defaults for non-boosted pipes
-          this.pipelineMeshes.forEach((pipe, key) => {
-              if (!activeBoosts.has(key)) {
-                  if (pipe.glow.material.opacity !== 0.45) {
-                      pipe.glow.material.opacity = 0.45;
-                  }
-                  this._tempColor.copy(pipe.baseColor).lerp(COLOR_WHITE, 0.35);
-                  if (!pipe.glow.material.color.equals(this._tempColor)) {
-                      pipe.glow.material.color.copy(this._tempColor);
-                  }
+      // Apply active boosts
+      activeBoosts.forEach(key => {
+          const pipe = this.pipelineMeshes.get(key);
+          if (pipe) {
+              // Pulse flow strongly
+              pipe.glow.material.opacity = 0.5 + Math.sin(this.time * 10) * 0.4;
+              pipe.glow.material.color.setHex(0xff00ff); // Purple boost color
+          }
+      });
+
+      // Restore defaults for non-boosted pipes
+      this.pipelineMeshes.forEach((pipe, key) => {
+          if (!activeBoosts.has(key)) {
+              if (pipe.glow.material.opacity !== 0.45) {
+                  pipe.glow.material.opacity = 0.45;
               }
-          });
-      }
+              this._tempColor.copy(pipe.baseColor).lerp(COLOR_WHITE, 0.35);
+              if (!pipe.glow.material.color.equals(this._tempColor)) {
+                  pipe.glow.material.color.copy(this._tempColor);
+              }
+          }
+      });
   }
 
   // Effect System Methods
