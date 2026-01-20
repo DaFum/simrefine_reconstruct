@@ -32,7 +32,7 @@ export function buildDefaultMesh(context) {
 
   const topper = new THREE.Mesh(
     new THREE.BoxGeometry(baseWidth * 0.78, baseHeight * 0.32, baseDepth * 0.78),
-    accentMaterial.clone()
+    accentMaterial ? accentMaterial.clone() : bodyMaterial
   );
   topper.position.y = baseHeight + topper.geometry.parameters.height / 2 - 0.4;
   group.add(topper);

@@ -119,7 +119,7 @@ export function processHydrocracker(context) {
 
   const heavyUsedHydro = Math.min(heavyPool, hydroFeed * 0.55);
   const residUsedHydro = Math.min(residPool, hydroFeed * 0.35);
-  const dieselUsedHydro = Math.min(dieselPool * 0.5, hydroFeed - heavyUsedHydro - residUsedHydro);
+  const dieselUsedHydro = Math.min(dieselPool * 0.5, Math.max(0, hydroFeed - heavyUsedHydro - residUsedHydro));
 
   if (hydrocracker) {
     hydrocracker.throughput = perHourToPerDay(hydroFeed);
@@ -176,7 +176,13 @@ export function processSulfur(context) {
     ? perDayToPerHour(sulfur.capacity) * clamp(sulfurState.throttle, 0, 1.2)
     : 0;
 
-  const sulfurFeed = Math.min(residPool + heavyPool, sulfurCapacity);
+  const totalAvailable = residPool + heavyPool;
+  const residRatio = totalAvailable > 0 ? residPool / totalAvailable : 0.5;
+
+  const sulfurFeed = Math.min(totalAvailable, sulfurCapacity);
+  const residConsumed = Math.min(residPool, sulfurFeed * residRatio);
+  const heavyConsumed = Math.min(heavyPool, sulfurFeed * (1 - residRatio));
+
   const sulfurRemoved = sulfurFeed * (0.55 + environmentParam * 0.4);
 
   if (sulfur) {
@@ -186,8 +192,8 @@ export function processSulfur(context) {
   }
 
   return {
-    residPool: residPool - sulfurFeed * 0.6,
-    heavyPool: heavyPool - sulfurFeed * 0.4,
+    residPool: residPool - residConsumed,
+    heavyPool: heavyPool - heavyConsumed,
     sulfur: sulfurRemoved,
     waste: Math.max(0, sulfurFeed - sulfurRemoved),
   };
