@@ -13,7 +13,6 @@ import {
 
 const PRODUCT_LABELS = { gasoline: "gasoline", diesel: "diesel", jet: "jet fuel" };
 const HOURS_PER_DAY = 24;
-const SHIPMENT_PARCEL_SIZES = { gasoline: 44, diesel: 36, jet: 30 };
 const SHIPMENT_HORIZON_HOURS = 48;
 const BASE_CRUDE_THROUGHPUT = 120;
 const randomRange = (min, max) => min + Math.random() * (max - min);
