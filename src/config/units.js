@@ -1,0 +1,81 @@
+/**
+ * Unit Configurations
+ * Visual and layout configuration for refinery units
+ */
+
+export const UNIT_CONFIGS = [
+  {
+    id: "distillation",
+    name: "Crude Distillation",
+    tileX: 6,
+    tileY: 3,
+    width: 3,
+    height: 4,
+    color: 0xbec9df,
+    accent: 0xf3cf73,
+    accentAlt: 0xe8933d,
+    style: "towers",
+  },
+  {
+    id: "reformer",
+    name: "Naphtha Reformer",
+    tileX: 3,
+    tileY: 6,
+    width: 2,
+    height: 3,
+    color: 0xd6aa80,
+    accent: 0x8c5a31,
+    accentAlt: 0xf2d5a4,
+    style: "rect",
+  },
+  {
+    id: "fcc",
+    name: "Catalytic Cracker",
+    tileX: 10,
+    tileY: 6,
+    width: 3,
+    height: 3,
+    color: 0xe2c568,
+    accent: 0x9a6a24,
+    accentAlt: 0xf6df9a,
+    style: "reactor",
+  },
+  {
+    id: "hydrocracker",
+    name: "Hydrocracker",
+    tileX: 3,
+    tileY: 2,
+    width: 2,
+    height: 3,
+    color: 0xb6ded0,
+    accent: 0x419a74,
+    accentAlt: 0xdaf0e8,
+    style: "towers",
+  },
+  {
+    id: "alkylation",
+    name: "Alkylation",
+    tileX: 11,
+    tileY: 2,
+    width: 2,
+    height: 3,
+    color: 0xd3b3f2,
+    accent: 0x845ec4,
+    accentAlt: 0xf3e1ff,
+    style: "rect",
+  },
+  {
+    id: "sulfur",
+    name: "Sulfur Recovery",
+    tileX: 7,
+    tileY: 9,
+    width: 2,
+    height: 2,
+    color: 0xe9edf1,
+    accent: 0x8c96a7,
+    accentAlt: 0xf7f9fb,
+    style: "support",
+  },
+];
+
+export default UNIT_CONFIGS;
