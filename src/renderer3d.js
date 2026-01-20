@@ -94,6 +94,8 @@ export class TileRenderer {
     this._vectorB = new THREE.Vector3();
     this._tempColor = new THREE.Color();
     this._tempColor2 = new THREE.Color();
+    this._flowLowColor = new THREE.Color();
+    this._flowHighColor = new THREE.Color();
 
     this.deviceScaleX = 1;
     this.deviceScaleY = 1;
@@ -250,9 +252,7 @@ export class TileRenderer {
       unit.indicator.scale.y = 0.2 + heat * 0.9;
       unit.indicator.material.opacity = clamp(indicatorIntensity, 0.12, 0.9);
 
-      this._tempColor2.set(palette.flowLow);
-      this._tempColor.set(palette.flowHigh);
-      this._tempColor2.lerp(this._tempColor, clamp(utilization, 0, 1));
+      this._tempColor2.copy(this._flowLowColor).lerp(this._flowHighColor, clamp(utilization, 0, 1));
       unit.indicator.material.color.copy(this._tempColor2);
 
       const highlightActive = this.selectedUnitId === unitId;
@@ -1938,6 +1938,9 @@ export class TileRenderer {
     if (this.pointerMesh?.material) {
       this.pointerMesh.material.color.set(palette.pointer);
     }
+    this._flowLowColor.set(palette.flowLow || 0x1a5d8f);
+    this._flowHighColor.set(palette.flowHigh || 0xaad0ff);
+
     if (this.waterMesh?.material) {
       const waterBase = new THREE.Color(palette.flowLow || 0x1a5d8f);
       this.waterMesh.material.color.copy(waterBase.lerp(new THREE.Color(0x162b3d), 0.45));
