@@ -15,6 +15,18 @@ export const WEIGHT_PROFILES = {
 
 export const BASE_DEMAND = { gasoline: 55, diesel: 30, jet: 14 };
 
+const MIN_COST_FACTOR = 0.7;
+const PENALTY_BASE_FACTOR = 0.24;
+const PENALTY_SHARE_FACTOR = 0.32;
+const DRAG_BASE_FACTOR = 0.1;
+const DRAG_WEIGHT_FACTOR = 0.08;
+const SHIPPING_PRESSURE_MULTIPLIER = 8;
+const DOWNTIME_PRESSURE_MULTIPLIER = 10;
+const DIRECTIVE_DRAG_MULTIPLIER = 4;
+const ENV_PREMIUM_MULTIPLIER = 7;
+const SAFETY_PREMIUM_MULTIPLIER = 4;
+const MAINTENANCE_RELIEF_MULTIPLIER = 12;
+
 /**
  * Calculate production cost target for a product
  */
@@ -36,18 +48,18 @@ export function calculateCostTarget(params) {
   } = params;
 
   return Math.max(
-    feedCostPerBbl * 0.7,
+    feedCostPerBbl * MIN_COST_FACTOR,
     feedCostPerBbl +
       operationsPerBbl +
       carryingPerBbl +
-      penaltyPerBbl * (0.24 + share * 0.32) +
-      logisticDrag * (0.1 + weights.shipping * 0.08) +
-      shippingPressure * weights.shipping * 8 +
-      downtimePressure * weights.downtime * 10 +
-      directiveDrag * 4 +
-      environmentPremium * weights.env * 7 +
-      safetyPremium * weights.maintenance * 4 -
-      maintenanceRelief * weights.maintenance * 12
+      penaltyPerBbl * (PENALTY_BASE_FACTOR + share * PENALTY_SHARE_FACTOR) +
+      logisticDrag * (DRAG_BASE_FACTOR + weights.shipping * DRAG_WEIGHT_FACTOR) +
+      shippingPressure * weights.shipping * SHIPPING_PRESSURE_MULTIPLIER +
+      downtimePressure * weights.downtime * DOWNTIME_PRESSURE_MULTIPLIER +
+      directiveDrag * DIRECTIVE_DRAG_MULTIPLIER +
+      environmentPremium * weights.env * ENV_PREMIUM_MULTIPLIER +
+      safetyPremium * weights.maintenance * SAFETY_PREMIUM_MULTIPLIER -
+      maintenanceRelief * weights.maintenance * MAINTENANCE_RELIEF_MULTIPLIER
   );
 }
 

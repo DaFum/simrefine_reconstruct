@@ -77,5 +77,3 @@ export const UNIT_CONFIGS = [
     style: "support",
   },
 ];
-
-export default UNIT_CONFIGS;

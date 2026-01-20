@@ -176,20 +176,23 @@ export function applyStrainPenalties(result, strainPenalty, crudeThroughput) {
  * Cap liquid products to physical maximum
  */
 export function capLiquidProducts(result, crudeThroughput) {
-  const totalLiquidProducts = result.gasoline + result.diesel + result.jet;
+  // Create a shallow copy to avoid mutating inputs if they are reused elsewhere
+  const capped = { ...result };
+
+  const totalLiquidProducts = capped.gasoline + capped.diesel + capped.jet;
   const maxLiquidProducts = crudeThroughput * 1.02;
 
   if (totalLiquidProducts > maxLiquidProducts && totalLiquidProducts > 0) {
     const scale = maxLiquidProducts / totalLiquidProducts;
-    result.gasoline *= scale;
-    result.diesel *= scale;
-    result.jet *= scale;
+    capped.gasoline *= scale;
+    capped.diesel *= scale;
+    capped.jet *= scale;
   }
 
   const maxLpg = crudeThroughput * 0.12;
-  if (result.lpg > maxLpg) {
-    result.lpg = maxLpg;
+  if (capped.lpg > maxLpg) {
+    capped.lpg = maxLpg;
   }
 
-  return result;
+  return capped;
 }

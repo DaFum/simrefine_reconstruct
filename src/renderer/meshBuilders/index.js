@@ -9,11 +9,13 @@ import { buildSupportMesh } from "./supportMeshBuilder.js";
 import { buildRectMesh } from "./rectMeshBuilder.js";
 import { buildDefaultMesh } from "./defaultMeshBuilder.js";
 
-export { buildTowersMesh } from "./towersMeshBuilder.js";
-export { buildReactorMesh } from "./reactorMeshBuilder.js";
-export { buildSupportMesh } from "./supportMeshBuilder.js";
-export { buildRectMesh } from "./rectMeshBuilder.js";
-export { buildDefaultMesh } from "./defaultMeshBuilder.js";
+export {
+  buildTowersMesh,
+  buildReactorMesh,
+  buildSupportMesh,
+  buildRectMesh,
+  buildDefaultMesh,
+};
 
 const MESH_BUILDERS = {
   towers: buildTowersMesh,
