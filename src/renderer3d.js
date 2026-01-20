@@ -96,6 +96,9 @@ export class TileRenderer {
     this._tempColor2 = new THREE.Color();
     this._flowLowColor = new THREE.Color();
     this._flowHighColor = new THREE.Color();
+    this._dummy = new THREE.Object3D();
+    this._tempVec3 = new THREE.Vector3();
+    this._tempVec4 = new THREE.Vector3();
 
     this.deviceScaleX = 1;
     this.deviceScaleY = 1;
@@ -324,14 +327,27 @@ export class TileRenderer {
 
       if (Array.isArray(tank.gaugeTickMaterials)) {
         const tickBaseColor = this._tempColor.copy(tank.baseColor || COLOR_WHITE);
+        const limit = Math.max(tank.gaugeTickMaterials.length - 1, 1);
+
+        // Pre-calculate colors to avoid per-tick lerp operations
+        const colorActive = COLOR_WHITE;
+        // Use tempColor2 for inactive color (lerp 0.65)
+        const colorInactive = this._tempColor2.copy(tickBaseColor).lerp(COLOR_WHITE, 0.65);
+
         tank.gaugeTickMaterials.forEach((material, index) => {
           if (!material || !material.color) {
             return;
           }
-          const emphasis = ratio >= index / Math.max(tank.gaugeTickMaterials.length - 1, 1) ? 0.35 : 0.0;
-          this._tempColor2.copy(tickBaseColor).lerp(COLOR_WHITE, 0.65 + emphasis);
-          material.color.copy(this._tempColor2);
-          material.opacity = 0.22 + emphasis * 0.9;
+          // emphasis logic: ratio >= index/limit ? 0.35 : 0.0
+          const isActive = ratio >= index / limit;
+
+          if (isActive) {
+            material.color.copy(colorActive);
+            material.opacity = 0.535; // 0.22 + 0.35 * 0.9
+          } else {
+            material.color.copy(colorInactive);
+            material.opacity = 0.22;
+          }
         });
       }
 
@@ -555,9 +571,9 @@ export class TileRenderer {
 
       // Update Trucks
       let truckCount = 0;
-      const dummy = new THREE.Object3D();
-      const tempPos = new THREE.Vector3();
-      const tempLook = new THREE.Vector3();
+      const dummy = this._dummy;
+      const tempPos = this._tempVec3;
+      const tempLook = this._tempVec4;
 
       const convoys = state && Array.isArray(state.convoys) ? state.convoys : [];
       const inspections = state && Array.isArray(state.inspections) ? state.inspections : [];
@@ -615,7 +631,8 @@ export class TileRenderer {
           const unit = this.unitMeshes.get(insp.unitId);
           if (!unit) return;
 
-          const targetPos = this._vectorA.copy(unit.group.position).add(new THREE.Vector3(0, 10, 0));
+          const targetPos = this._vectorA.copy(unit.group.position);
+          targetPos.y += 10;
           const startPos = this._vectorB.set(0, 20, 0); // Center high
 
           const t = clamp(insp.elapsed / insp.duration, 0, 1);
