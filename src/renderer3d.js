@@ -612,7 +612,9 @@ export class TileRenderer {
               }
 
               dummy.position.copy(tempPos);
-              dummy.lookAt(tempPos.clone().add(tempLook));
+              // Optimization: reuse vectorB for lookAt calculation to avoid cloning
+              this._vectorB.copy(tempPos).add(tempLook);
+              dummy.lookAt(this._vectorB);
               dummy.updateMatrix();
               this.truckMesh.setMatrixAt(truckCount++, dummy.matrix);
 
@@ -1875,7 +1877,8 @@ export class TileRenderer {
     const bob = Math.sin(ship.bobPhase) * 0.12;
     ship.progress += deltaSeconds * 0.45;
     ship.progress = Math.min(ship.progress, 2.3);
-    ship.hull.material.color.lerp(ship.baseColor.clone().multiplyScalar(0.9), clamp(deltaSeconds * 1.5, 0, 1));
+    this._tempColor.copy(ship.baseColor).multiplyScalar(0.9);
+    ship.hull.material.color.lerp(this._tempColor, clamp(deltaSeconds * 1.5, 0, 1));
     ship.light.intensity = Math.max(0.2, ship.light.intensity - deltaSeconds * 0.1);
     this._positionShip(ship, ship.progress, bob);
     if (ship.wake?.material) {
