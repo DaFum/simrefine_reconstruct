@@ -119,7 +119,7 @@ export function processHydrocracker(context) {
 
   const heavyUsedHydro = Math.min(heavyPool, hydroFeed * 0.55);
   const residUsedHydro = Math.min(residPool, hydroFeed * 0.35);
-  const dieselUsedHydro = Math.min(dieselPool * 0.5, hydroFeed - heavyUsedHydro - residUsedHydro);
+  const dieselUsedHydro = Math.min(dieselPool * 0.5, Math.max(0, hydroFeed - heavyUsedHydro - residUsedHydro));
 
   if (hydrocracker) {
     hydrocracker.throughput = perHourToPerDay(hydroFeed);

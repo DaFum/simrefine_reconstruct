@@ -92,5 +92,3 @@ export const SESSION_PRESETS = {
     log: "Modernization drill loaded — chase export contracts without breaking reliability.",
   },
 };
-
-export default { OPERATION_PRESETS, SESSION_PRESETS };
