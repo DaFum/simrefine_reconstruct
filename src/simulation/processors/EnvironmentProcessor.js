@@ -14,7 +14,6 @@ export function calculateEnvironmentMetrics(context) {
     incidents,
     environmentLevel,
     scenario,
-    crudeThroughput,
   } = context;
 
   const carbonBase =
