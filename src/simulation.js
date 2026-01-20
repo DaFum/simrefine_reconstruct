@@ -1,6 +1,12 @@
 import { MISSIONS } from "./content/missions.js";
 import { MarketSystem } from "./systems/MarketSystem.js";
 import { LogisticsSystem } from "./systems/LogisticsSystem.js";
+import { SupplyChainSystem } from "./systems/SupplyChainSystem.js";
+import { StaffingSystem } from "./systems/StaffingSystem.js";
+import { BlendingSystem } from "./systems/BlendingSystem.js";
+import { DisasterSystem } from "./systems/DisasterSystem.js";
+import { MaintenanceSystem } from "./systems/MaintenanceSystem.js";
+import { TimeMachineSystem } from "./systems/TimeMachineSystem.js";
 import { SCENARIOS, UNIT_DEFINITIONS, SPEED_PRESETS, DEFAULT_PARAMS, BASE_PRICES } from "./simulation/constants.js";
 import { clamp, perDayToPerHour, perHourToPerDay } from "./simulation/utils/calculations.js";
 import {
@@ -103,6 +109,14 @@ export class RefinerySimulation {
 
     this.logisticsSystem = new LogisticsSystem(this);
     this.storage = this.logisticsSystem.storage; // Legacy reference
+
+    // New game feature systems (from game-features-list.md)
+    this.supplyChainSystem = new SupplyChainSystem(this);
+    this.staffingSystem = new StaffingSystem(this);
+    this.blendingSystem = new BlendingSystem(this);
+    this.disasterSystem = new DisasterSystem(this);
+    this.maintenanceSystem = new MaintenanceSystem(this);
+    this.timeMachineSystem = new TimeMachineSystem(this);
 
     // Alias logistics state for legacy access
     this.shipments = this.logisticsSystem.shipments;
@@ -426,6 +440,14 @@ export class RefinerySimulation {
     this.marketSystem.reset();
     this.market = this.marketSystem.state;
     this.logisticsSystem.reset();
+
+    // Reset new game feature systems
+    this.supplyChainSystem?.reset();
+    this.staffingSystem?.reset();
+    this.blendingSystem?.reset();
+    this.disasterSystem?.reset();
+    this.maintenanceSystem?.reset();
+    this.timeMachineSystem?.reset();
 
     this.activeInspections = [];
     this.completedInspections = [];
@@ -779,6 +801,44 @@ export class RefinerySimulation {
         scenario
     });
 
+    // Update new game feature systems
+    const supplyChainReport = this.supplyChainSystem?.update(deltaMinutes, {
+        demandRate: crudeThroughputPerDay
+    });
+
+    const staffingEffects = this.staffingSystem?.update(deltaMinutes) || {
+        efficiency: 1,
+        operatorErrorRate: 0.02,
+        maintenanceBonus: 0,
+        safetyBonus: 0
+    };
+
+    this.blendingSystem?.update(deltaMinutes, {
+        autoBlend: true,
+        demand: {
+            regular: result.gasoline * 0.55,
+            midgrade: result.gasoline * 0.15,
+            premium: result.gasoline * 0.30
+        }
+    });
+
+    const disasterReport = this.disasterSystem?.update(deltaMinutes, {
+        units: this.units,
+        scenario
+    }) || { penalties: 0 };
+
+    const maintenanceReport = this.maintenanceSystem?.update(deltaMinutes, {
+        scenario,
+        staffingEffects
+    }) || {};
+
+    this.timeMachineSystem?.update(deltaMinutes);
+
+    // Apply staffing effects to reliability calculations
+    const staffingReliabilityBonus = staffingEffects.safetyBonus || 0;
+    const operatorErrorPenalty = staffingEffects.operatorErrorRate > 0.03 ?
+        (staffingEffects.operatorErrorRate - 0.02) * 500 : 0;
+
     // Calculate environment metrics using processor
     const environmentLevel = clamp(this.params.environment ?? 0.35, 0, 1);
     const envMetrics = calculateEnvironmentMetrics({
@@ -802,12 +862,20 @@ export class RefinerySimulation {
     const environmentPenalty = envMetrics.environmentPenalty;
     const carbonPerHour = envMetrics.carbonPerHour;
 
-    let penalty = incidentsRisk.incidentPenalty + logisticsReport.penalty + environmentPenalty;
+    // Add disaster penalties and operator error costs to total penalties
+    const disasterPenalty = disasterReport.penalties || 0;
+    let penalty = incidentsRisk.incidentPenalty + logisticsReport.penalty + environmentPenalty + disasterPenalty + operatorErrorPenalty;
+
+    // Add staffing labor costs and maintenance costs to fixed overhead
+    const laborCost = staffingEffects.laborCost || 0;
+    const maintenanceCost = this.maintenanceSystem?.getMaintenanceCostRate() || 0;
+    const demurrageCost = supplyChainReport?.demurrageCost || 0;
+
     const fixedOverhead = this.marketSystem.calculateFixedOverhead({
       crudeThroughput: crudeThroughputPerDay,
       scenario,
       params: this.params,
-    });
+    }) + laborCost + maintenanceCost + demurrageCost;
 
     // Update Market System
     const marketResult = this.marketSystem.update({
@@ -1585,11 +1653,18 @@ export class RefinerySimulation {
     return this.logisticsSystem.expandStorageCapacity();
   }
 
-  togglePerformanceRecording() {
+  togglePerformanceRecording(options = {}) {
+    const { includeTimeMachine = false } = options;
+
     if (this.recorder?.active) {
       const summary = this._summarizeRecorderState();
       this.lastRecordingSummary = summary ? { ...summary } : null;
       this.recorder = this._createRecorderState();
+
+      // Also stop TimeMachine recording if it was started together
+      if (includeTimeMachine && this.timeMachineSystem?.recording?.active) {
+        this.timeMachineSystem.stopRecording();
+      }
 
       if (summary) {
         const duration = summary.durationHours || 0;
@@ -1617,6 +1692,15 @@ export class RefinerySimulation {
     this.recorder.active = true;
     this.recorder.startedAt = this.timeMinutes;
     this.recorder.lastUpdatedAt = this.timeMinutes;
+
+    // Also start TimeMachine recording for full state playback
+    if (includeTimeMachine && this.timeMachineSystem) {
+      this.timeMachineSystem.startRecording({
+        name: `Shift Recording ${this._formatTime()}`,
+        scenario: this.activeScenarioKey
+      });
+    }
+
     this.pushLog("info", "Shift recorder armed — capturing performance snapshot.");
     return { active: true, summary: null };
   }
@@ -1718,7 +1802,7 @@ export class RefinerySimulation {
     return true;
   }
 
-  scheduleTurnaround(unitId) {
+  scheduleTurnaround(unitId, options = {}) {
     if (!unitId) {
       this.pushLog("info", "Select a processing unit to schedule a turnaround.");
       return false;
@@ -1740,7 +1824,23 @@ export class RefinerySimulation {
       return false;
     }
 
-    const downtime = 180 + Math.random() * 180;
+    // Determine turnaround type from options or unit integrity
+    const turnaroundType = options.type || (unit.integrity < 0.4 ? 'major' : 'mini');
+    const baseDuration = turnaroundType === 'major' ? 480 : turnaroundType === 'standard' ? 360 : 180;
+    const downtime = baseDuration + Math.random() * (baseDuration * 0.5);
+
+    // Track in MaintenanceSystem if available
+    if (this.maintenanceSystem) {
+      const result = this.maintenanceSystem.scheduleTurnaround(unitId, turnaroundType, this.timeMinutes);
+      if (result.success && result.turnaround) {
+        // Mark as immediately starting
+        result.turnaround.status = 'in_progress';
+        result.turnaround.actualStart = this.timeMinutes;
+        this.maintenanceSystem.activeTurnarounds.push(result.turnaround);
+      }
+    }
+
+    // Apply turnaround immediately (backwards compatible)
     unit.status = "offline";
     unit.downtime = downtime;
     unit.throughput = 0;
@@ -1750,16 +1850,23 @@ export class RefinerySimulation {
     unit.alertDetail = {
       kind: "turnaround",
       severity: "warning",
-      summary: "Turnaround in progress",
+      summary: `${turnaroundType.charAt(0).toUpperCase() + turnaroundType.slice(1)} turnaround in progress`,
       cause: "Estimated " + Math.round(downtime) + " minutes until restart.",
       guidance: "Expect improved integrity once crews wrap up.",
       recordedAt: this._formatTime(),
     };
-    unit.integrity = clamp(unit.integrity + 0.3, 0, 1);
-    this.pendingOperationalCost += 340;
+
+    // Integrity boost based on turnaround type
+    const integrityBoost = turnaroundType === 'major' ? 0.5 : turnaroundType === 'standard' ? 0.35 : 0.2;
+    unit.integrity = clamp(unit.integrity + integrityBoost, 0, 1);
+
+    // Cost based on turnaround type
+    const cost = turnaroundType === 'major' ? 800 : turnaroundType === 'standard' ? 500 : 340;
+    this.pendingOperationalCost += cost;
+
     this.pushLog(
       "info",
-      unit.name + " turnaround scheduled; crews draining and opening equipment.",
+      unit.name + ` ${turnaroundType} turnaround started; crews draining and opening equipment.`,
       { unitId }
     );
     return true;
@@ -2099,6 +2206,172 @@ export class RefinerySimulation {
     return this.logisticsSystem.getStorageAlerts();
   }
 
+  // New game feature system getters (from game-features-list.md)
+
+  /**
+   * Get supply chain state including crude types and contracts
+   */
+  getSupplyChainState() {
+    if (!this.supplyChainSystem) return null;
+    return {
+      crudeTanks: this.supplyChainSystem._getTankLevels(),
+      crudeBlend: this.supplyChainSystem._calculateCrudeBlend(),
+      marineDock: this.supplyChainSystem._getMarineDockStatus(),
+      contracts: this.supplyChainSystem._getContractsSummary(),
+      pipelineIntake: { ...this.supplyChainSystem.pipelineIntake },
+      stats: { ...this.supplyChainSystem.stats }
+    };
+  }
+
+  /**
+   * Get staffing/HR system state
+   */
+  getStaffingState() {
+    if (!this.staffingSystem) return null;
+    return this.staffingSystem.getStatus();
+  }
+
+  /**
+   * Get blending system state
+   */
+  getBlendingState() {
+    if (!this.blendingSystem) return null;
+    return {
+      tanks: this.blendingSystem._getTankStatus(),
+      blendstocks: this.blendingSystem._getBlendstockStatus(),
+      quality: { ...this.blendingSystem.qualityMetrics },
+      additives: this.blendingSystem._getAdditiveStatus()
+    };
+  }
+
+  /**
+   * Get disaster system state
+   */
+  getDisasterState() {
+    if (!this.disasterSystem) return null;
+    return {
+      activeDisasters: this.disasterSystem.activeDisasters.map(d => this.disasterSystem._getDisasterStatus(d)),
+      deployedTeams: this.disasterSystem.deployedTeams.map(t => ({ ...t })),
+      evacuation: { ...this.disasterSystem.evacuation },
+      contamination: { ...this.disasterSystem.contamination },
+      dangerLevel: this.disasterSystem.getDangerLevel(),
+      stats: { ...this.disasterSystem.stats }
+    };
+  }
+
+  /**
+   * Get maintenance system state
+   */
+  getMaintenanceState() {
+    if (!this.maintenanceSystem) return null;
+    return {
+      unitHealth: this.maintenanceSystem._getUnitHealth(),
+      strategies: { ...this.maintenanceSystem.unitStrategies },
+      scheduledMaintenance: this.maintenanceSystem.scheduledMaintenance.map(m => ({ ...m })),
+      activeTurnarounds: this.maintenanceSystem.activeTurnarounds.map(t => ({ ...t })),
+      workOrders: this.maintenanceSystem.workOrders.filter(w => w.status !== 'completed').map(w => ({ ...w })),
+      sensors: { ...this.maintenanceSystem.sensors },
+      stats: { ...this.maintenanceSystem.stats }
+    };
+  }
+
+  /**
+   * Get Time Machine system state
+   */
+  getTimeMachineState() {
+    if (!this.timeMachineSystem) return null;
+    return {
+      recording: this.timeMachineSystem.getRecordingStatus(),
+      playback: this.timeMachineSystem.getPlaybackStatus(),
+      sessions: this.timeMachineSystem.getSavedSessions(),
+      markers: this.timeMachineSystem.getMarkers()
+    };
+  }
+
+  /**
+   * Start Time Machine recording
+   */
+  startRecording(metadata = {}) {
+    return this.timeMachineSystem?.startRecording(metadata);
+  }
+
+  /**
+   * Stop Time Machine recording
+   */
+  stopRecording() {
+    return this.timeMachineSystem?.stopRecording();
+  }
+
+  /**
+   * Start Time Machine playback
+   */
+  startPlayback(sessionId, options = {}) {
+    return this.timeMachineSystem?.startPlayback(sessionId, options);
+  }
+
+  /**
+   * Stop Time Machine playback
+   */
+  stopPlayback() {
+    return this.timeMachineSystem?.stopPlayback();
+  }
+
+  /**
+   * Create a procurement contract
+   */
+  createProcurementContract(options) {
+    return this.supplyChainSystem?.createContract(options);
+  }
+
+  /**
+   * Schedule a tanker delivery
+   */
+  scheduleTankerDelivery(options) {
+    return this.supplyChainSystem?.scheduleDelivery(options);
+  }
+
+  /**
+   * Set staffing target for a department
+   */
+  setStaffingTarget(departmentId, target) {
+    return this.staffingSystem?.setStaffingTarget(departmentId, target);
+  }
+
+  /**
+   * Start training program
+   */
+  startTrainingProgram(programId, departmentId = null) {
+    return this.staffingSystem?.startTraining(programId, departmentId);
+  }
+
+  /**
+   * Set maintenance strategy for a unit
+   */
+  setMaintenanceStrategy(unitId, strategyId) {
+    return this.maintenanceSystem?.setStrategy(unitId, strategyId);
+  }
+
+  /**
+   * Schedule a turnaround
+   */
+  scheduleTurnaround(unitId, turnaroundType, startTime = null) {
+    return this.maintenanceSystem?.scheduleTurnaround(unitId, turnaroundType, startTime);
+  }
+
+  /**
+   * Deploy emergency response team
+   */
+  deployEmergencyTeam(teamId, disasterId) {
+    return this.disasterSystem?.deployTeam(teamId, disasterId);
+  }
+
+  /**
+   * Blend gasoline to a specific grade
+   */
+  blendGasoline(gradeId, volumeKb) {
+    return this.blendingSystem?.blendGasoline(gradeId, volumeKb);
+  }
+
   getActiveAlerts() {
     const alerts = [];
     this.units.forEach((unit) => {
@@ -2232,6 +2505,13 @@ export class RefinerySimulation {
       performanceHistory: this.performanceHistory.map((entry) => ({ ...entry })),
       logs: this.logs.map((entry) => ({ ...entry })),
       market: this.getMarketState(),
+      // New system states
+      supplyChain: this.supplyChainSystem?.getState() || null,
+      staffing: this.staffingSystem?.getState() || null,
+      blending: this.blendingSystem?.getState() || null,
+      disaster: this.disasterSystem?.getState() || null,
+      maintenance: this.maintenanceSystem?.getState() || null,
+      timeMachine: this.timeMachineSystem?.getState() || null,
     };
 
     return snapshot;
@@ -2504,6 +2784,26 @@ export class RefinerySimulation {
         .slice(-80);
     } else {
       this.logs = [];
+    }
+
+    // Restore new system states
+    if (snapshot.supplyChain && this.supplyChainSystem) {
+      this.supplyChainSystem.restoreState(snapshot.supplyChain);
+    }
+    if (snapshot.staffing && this.staffingSystem) {
+      this.staffingSystem.restoreState(snapshot.staffing);
+    }
+    if (snapshot.blending && this.blendingSystem) {
+      this.blendingSystem.restoreState(snapshot.blending);
+    }
+    if (snapshot.disaster && this.disasterSystem) {
+      this.disasterSystem.restoreState(snapshot.disaster);
+    }
+    if (snapshot.maintenance && this.maintenanceSystem) {
+      this.maintenanceSystem.restoreState(snapshot.maintenance);
+    }
+    if (snapshot.timeMachine && this.timeMachineSystem) {
+      this.timeMachineSystem.restoreState(snapshot.timeMachine);
     }
 
     const storageLevels = this.storage?.levels || {};

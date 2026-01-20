@@ -4,3 +4,6 @@
  */
 
 export * from "./renderers/index.js";
+
+// UI Components
+export { TickerComponent } from "./components/TickerComponent.js";
