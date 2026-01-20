@@ -4,7 +4,7 @@
  * Affects reaction time, operator error rates, and overall plant performance
  */
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+import { clamp } from "../simulation/utils/calculations.js";
 
 export const DEPARTMENTS = {
   operations: {
@@ -287,6 +287,15 @@ export class StaffingSystem {
           });
         }
 
+        // Emit event
+        if (this.simulation?.eventBus) {
+          this.simulation.eventBus.emit('TRAINING_COMPLETED', {
+            programId: training.programId,
+            department: training.department,
+            programName: program.name
+          });
+        }
+
         return false;
       }
       return true;
@@ -436,6 +445,34 @@ export class StaffingSystem {
       fatigueLevel: this.fatigueLevel,
       metrics: { ...this.metrics }
     };
+  }
+
+  /**
+   * Restore state
+   */
+  restoreState(state) {
+    if (state.departments) {
+      this.departments = JSON.parse(JSON.stringify(state.departments));
+    }
+    if (typeof state.trainingBudget === 'number') {
+      this.trainingBudget = state.trainingBudget;
+    }
+    if (typeof state.trainingSpent === 'number') {
+      this.trainingSpent = state.trainingSpent;
+    }
+    if (state.activeTraining) {
+      this.activeTraining = JSON.parse(JSON.stringify(state.activeTraining));
+    }
+    if (typeof state.overtimeHours === 'number') {
+      this.overtimeHours = state.overtimeHours;
+    }
+    if (typeof state.fatigueLevel === 'number') {
+      this.fatigueLevel = state.fatigueLevel;
+    }
+    if (state.metrics) {
+      Object.assign(this.metrics, state.metrics);
+    }
+    this._updateMetrics();
   }
 
   /**

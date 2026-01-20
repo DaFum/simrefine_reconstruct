@@ -4,7 +4,7 @@
  * and quality specifications for final products.
  */
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+import { clamp } from "../simulation/utils/calculations.js";
 
 export const GASOLINE_GRADES = {
   regular: {
@@ -557,6 +557,27 @@ export class BlendingSystem {
       qualityMetrics: { ...this.qualityMetrics },
       additiveUsage: JSON.parse(JSON.stringify(this.additiveUsage))
     };
+  }
+
+  /**
+   * Restore state
+   */
+  restoreState(state) {
+    if (state.blendingTanks) {
+      this.blendingTanks = JSON.parse(JSON.stringify(state.blendingTanks));
+    }
+    if (state.blendstockInventory) {
+      this.blendstockInventory = JSON.parse(JSON.stringify(state.blendstockInventory));
+    }
+    if (state.activeRecipes) {
+      this.activeRecipes = JSON.parse(JSON.stringify(state.activeRecipes));
+    }
+    if (state.qualityMetrics) {
+      Object.assign(this.qualityMetrics, state.qualityMetrics);
+    }
+    if (state.additiveUsage) {
+      this.additiveUsage = JSON.parse(JSON.stringify(state.additiveUsage));
+    }
   }
 
   reset() {

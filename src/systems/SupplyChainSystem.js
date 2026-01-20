@@ -4,7 +4,7 @@
  * marine terminal operations, and demurrage penalties.
  */
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+import { clamp } from "../simulation/utils/calculations.js";
 
 export const CRUDE_TYPES = {
   WTI: {
@@ -281,6 +281,14 @@ export class SupplyChainSystem {
           ship.unloadEndTime = currentTime;
           this.stats.totalBarrelsProcured += ship.crudeData ?
             (ship.crudeData.basePrice ? ship.volume : 0) : 0;
+          // Emit tanker unloaded event
+          if (this.simulation?.eventBus) {
+            this.simulation.eventBus.emit('TANKER_UNLOADED', {
+              shipId: ship.id,
+              crudeType: ship.crudeType,
+              demurrage: ship.demurrage
+            });
+          }
           return false; // Remove from occupied
         }
       }
@@ -309,6 +317,14 @@ export class SupplyChainSystem {
     this.marineDock.queue.forEach(ship => {
       if (ship.arrivalTime <= currentTime && ship.status === 'enroute') {
         ship.status = 'waiting';
+        // Emit tanker arrived event
+        if (this.simulation?.eventBus) {
+          this.simulation.eventBus.emit('TANKER_ARRIVED', {
+            shipId: ship.id,
+            crudeType: ship.crudeType,
+            volume: ship.volume
+          });
+        }
       }
 
       if (ship.status === 'waiting') {

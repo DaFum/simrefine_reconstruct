@@ -8,8 +8,7 @@ import { ThemeManager } from "./themeManager.js";
 import { WindowManager } from "./windowManager.js";
 import { UNIT_CONFIGS, PIPELINE_CONFIGS, OPERATION_PRESETS, SESSION_PRESETS } from "./config/index.js";
 import { TickerComponent } from "./ui/index.js";
-
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+import { clamp } from "./simulation/utils/calculations.js";
 
 const mapViewport = document.getElementById("map-viewport");
 let sceneContainer = document.getElementById("scene-container");

@@ -4,7 +4,7 @@
  * Allows reviewing past sessions to analyze what went wrong
  */
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+import { clamp } from "../simulation/utils/calculations.js";
 
 export const PLAYBACK_SPEEDS = [
   { id: 'slowest', label: '0.25x', multiplier: 0.25 },

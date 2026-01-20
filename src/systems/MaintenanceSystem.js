@@ -4,7 +4,7 @@
  * Component wear tracking, turnarounds, and reliability optimization.
  */
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+import { clamp } from "../simulation/utils/calculations.js";
 
 export const MAINTENANCE_STRATEGIES = {
   reactive: {
@@ -480,6 +480,14 @@ export class MaintenanceSystem {
         if (this.simulation?.pushLog) {
           this.simulation.pushLog('info', `${ta.typeData.name} completed on ${ta.unitId}`);
         }
+        if (this.simulation?.eventBus) {
+          this.simulation.eventBus.emit('TURNAROUND_COMPLETED', {
+            unitId: ta.unitId,
+            type: ta.type,
+            duration: ta.typeData.duration,
+            cost: ta.cost
+          });
+        }
 
         return false;
       }
@@ -614,6 +622,30 @@ export class MaintenanceSystem {
       workOrders: this.workOrders.filter(w => w.status !== 'completed'),
       stats: { ...this.stats }
     };
+  }
+
+  /**
+   * Restore state
+   */
+  restoreState(state) {
+    if (state.unitStrategies) {
+      this.unitStrategies = { ...state.unitStrategies };
+    }
+    if (state.components) {
+      this.components = JSON.parse(JSON.stringify(state.components));
+    }
+    if (state.sensors) {
+      this.sensors = JSON.parse(JSON.stringify(state.sensors));
+    }
+    if (state.scheduledMaintenance) {
+      this.scheduledMaintenance = JSON.parse(JSON.stringify(state.scheduledMaintenance));
+    }
+    if (state.workOrders) {
+      this.workOrders = JSON.parse(JSON.stringify(state.workOrders));
+    }
+    if (state.stats) {
+      Object.assign(this.stats, state.stats);
+    }
   }
 
   reset() {

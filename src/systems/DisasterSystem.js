@@ -4,7 +4,7 @@
  * emergency response, and evacuation mechanics.
  */
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+import { clamp } from "../simulation/utils/calculations.js";
 
 export const DISASTER_TYPES = {
   overpressure: {
@@ -245,6 +245,14 @@ export class DisasterSystem {
       );
     }
 
+    // Emit event
+    if (this.simulation?.eventBus) {
+      this.simulation.eventBus.emit('DISASTER_TRIGGERED', {
+        disaster: this._getDisasterStatus(disaster),
+        unitId: context.unitId
+      });
+    }
+
     // Check if evacuation needed
     if (type.severity === 'critical') {
       this.initiateEvacuation(disaster.unitId ? 2 : 3);
@@ -309,6 +317,9 @@ export class DisasterSystem {
         `${levelNames[level]} EVACUATION initiated! All personnel must evacuate immediately.`
       );
     }
+    if (this.simulation?.eventBus) {
+      this.simulation.eventBus.emit('EVACUATION_STARTED', { level, levelName: levelNames[level] });
+    }
   }
 
   /**
@@ -317,12 +328,16 @@ export class DisasterSystem {
   endEvacuation() {
     if (!this.evacuation.active) return;
 
+    const previousLevel = this.evacuation.level;
     this.evacuation.active = false;
     this.evacuation.level = 0;
     this.evacuation.affectedAreas = [];
 
     if (this.simulation?.pushLog) {
       this.simulation.pushLog('info', 'Evacuation ended. Personnel may return to designated areas.');
+    }
+    if (this.simulation?.eventBus) {
+      this.simulation.eventBus.emit('EVACUATION_ENDED', { previousLevel });
     }
   }
 
@@ -435,6 +450,13 @@ export class DisasterSystem {
           disaster.contained = true;
           if (this.simulation?.pushLog) {
             this.simulation.pushLog('info', `${disaster.typeData.name} contained by ${deployment.team.name}.`);
+          }
+          if (this.simulation?.eventBus) {
+            this.simulation.eventBus.emit('DISASTER_CONTAINED', {
+              disasterId: disaster.id,
+              type: disaster.type,
+              teamId: deployment.teamId
+            });
           }
         }
 
@@ -596,6 +618,27 @@ export class DisasterSystem {
       contamination: { ...this.contamination },
       stats: { ...this.stats }
     };
+  }
+
+  /**
+   * Restore state
+   */
+  restoreState(state) {
+    if (state.activeDisasters) {
+      this.activeDisasters = JSON.parse(JSON.stringify(state.activeDisasters));
+    }
+    if (state.deployedTeams) {
+      this.deployedTeams = JSON.parse(JSON.stringify(state.deployedTeams));
+    }
+    if (state.evacuation) {
+      this.evacuation = { ...this.evacuation, ...state.evacuation };
+    }
+    if (state.contamination) {
+      this.contamination = { ...this.contamination, ...state.contamination };
+    }
+    if (state.stats) {
+      Object.assign(this.stats, state.stats);
+    }
   }
 
   reset() {

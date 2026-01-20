@@ -1,7 +1,6 @@
 import * as THREE from "../vendor/three.module.js";
 import { buildUnitMesh } from "./renderer/meshBuilders/index.js";
-
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+import { clamp } from "./simulation/utils/calculations.js";
 const lerp = (start, end, t) => start + (end - start) * t;
 const damp = (current, target, lambda, dt) => lerp(current, target, 1 - Math.exp(-lambda * dt));
 
