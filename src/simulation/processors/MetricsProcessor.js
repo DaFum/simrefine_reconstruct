@@ -22,7 +22,7 @@ export function updateProductionMetrics(metrics, production) {
   metrics.diesel = round(perHourToPerDay(production.diesel));
   metrics.jet = round(perHourToPerDay(production.jet));
   metrics.lpg = round(perHourToPerDay(production.lpg));
-  metrics.waste = production.waste;
+  metrics.waste = round(perHourToPerDay(production.waste));
 }
 
 /**

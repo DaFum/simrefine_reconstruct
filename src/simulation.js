@@ -523,6 +523,11 @@ export class RefinerySimulation {
         : 0;
     const crudeThroughput = Math.min(crudeAvailable, distCapacity);
     const crudeThroughputPerDay = perHourToPerDay(crudeThroughput);
+
+    // Store actual throughput and CDU capacity in metrics for utilization calculation
+    this.metrics.crudeThroughput = crudeThroughputPerDay;
+    this.metrics.cduCapacity = distillation ? distillation.capacity : BASE_CRUDE_THROUGHPUT;
+
     if (distillation) {
       distillation.throughput = crudeThroughputPerDay;
       distillation.utilization = distillation.capacity
