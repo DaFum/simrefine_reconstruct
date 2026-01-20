@@ -68,5 +68,3 @@ export const PIPELINE_CONFIGS = [
     ],
   },
 ];
-
-export default PIPELINE_CONFIGS;

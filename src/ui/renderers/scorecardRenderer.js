@@ -9,7 +9,7 @@
  * @returns {boolean} Whether the trend needs redrawing
  */
 export function renderScorecard(context) {
-  const { elements, metrics, lastSignature, setSignature } = context;
+  const { elements, metrics } = context;
   const { scoreGrade, scoreDelta, scoreNote } = elements;
 
   if (!scoreGrade) {
