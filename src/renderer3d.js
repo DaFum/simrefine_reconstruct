@@ -59,6 +59,8 @@ const STORAGE_CONFIG = [
 const ALERT_COLOR = new THREE.Color(0xff7e6f);
 const HEAT_COLOR = new THREE.Color(0xffd66f);
 const COLOR_WHITE = new THREE.Color(0xffffff);
+const _lerpColorTempA = new THREE.Color();
+const _lerpColorTempB = new THREE.Color();
 
 export class TileRenderer {
   constructor(container, simulationInstance, unitDefs, pipelineDefs, options = {}) {
@@ -2052,8 +2054,16 @@ export class TileRenderer {
 
 function lerpColor(a, b, t, target) {
   const result = target || new THREE.Color();
-  const colorA = a instanceof THREE.Color ? a : new THREE.Color(a);
-  const colorB = b instanceof THREE.Color ? b : new THREE.Color(b);
+  let colorA = a;
+  if (!(a instanceof THREE.Color)) {
+    _lerpColorTempA.set(a);
+    colorA = _lerpColorTempA;
+  }
+  let colorB = b;
+  if (!(b instanceof THREE.Color)) {
+    _lerpColorTempB.set(b);
+    colorB = _lerpColorTempB;
+  }
   return result.copy(colorA).lerp(colorB, clamp(t, 0, 1));
 }
 
