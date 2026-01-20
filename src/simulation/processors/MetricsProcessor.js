@@ -76,7 +76,6 @@ export function updateOperationalMetrics(metrics, operational) {
     reliability,
     operationalStrain,
     carbon,
-    flareLevel,
     crudeThroughput,
     waste,
     flare,
