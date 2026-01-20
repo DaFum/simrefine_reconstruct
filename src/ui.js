@@ -1,3 +1,5 @@
+import { drawScoreTrend } from "./ui/renderers/index.js";
+
 const PRODUCT_LABELS = {
   gasoline: "Gasoline",
   diesel: "Diesel",
@@ -44,6 +46,10 @@ export class UIController {
       reliabilityOutput: document.getElementById("reliability-output"),
       strainOutput: document.getElementById("strain-output"),
       carbonOutput: document.getElementById("carbon-output"),
+      wasteOutput: document.getElementById("waste-output"),
+      flareOutput: document.getElementById("flare-output"),
+      incidentsOutput: document.getElementById("incidents-output"),
+      throughputOutput: document.getElementById("throughput-output"),
       gasolineFutures: document.getElementById("gasoline-futures"),
       dieselFutures: document.getElementById("diesel-futures"),
       jetFutures: document.getElementById("jet-futures"),
@@ -491,6 +497,14 @@ export class UIController {
     this._animateMetric(this.elements.dieselOutput, 'diesel', metrics.diesel, formatBpd);
     this._animateMetric(this.elements.jetOutput, 'jet', metrics.jet, formatBpd);
     this._animateMetric(this.elements.lpgOutput, 'lpg', metrics.lpg, formatBpd);
+    this._animateMetric(this.elements.wasteOutput, 'waste', metrics.waste || 0, formatBpd);
+
+    if (this.elements.flareOutput) {
+      const flare = Math.round((metrics.flareLevel || 0) * 100);
+      this.elements.flareOutput.textContent = `${flare}%`;
+      this.elements.flareOutput.classList.toggle("warning", flare > 15);
+      this.elements.flareOutput.classList.toggle("danger", flare > 40);
+    }
 
     // Animate Financials
     const profitVal = Math.round(metrics.profitPerHour * 1000);
@@ -526,6 +540,20 @@ export class UIController {
       this.elements.strainOutput.textContent = `${strainPct}%`;
       this.elements.strainOutput.classList.toggle("warning", strainPct >= 65);
     }
+
+    if (this.elements.incidentsOutput) {
+      this.elements.incidentsOutput.textContent = metrics.incidents || 0;
+      this.elements.incidentsOutput.classList.toggle("danger", (metrics.incidents || 0) > 0);
+    }
+
+    if (this.elements.throughputOutput) {
+        // Calculate utilization based on actual throughput vs CDU capacity from metrics
+        const throughput = metrics.crudeThroughput || 0;
+        const cduCapacity = metrics.cduCapacity || 180; // Fallback to 180
+        const util = cduCapacity > 0 ? Math.round((throughput / cduCapacity) * 100) : 0;
+        this.elements.throughputOutput.textContent = `${util}%`;
+    }
+
     this.elements.carbonOutput.textContent = `${metrics.carbon.toFixed(1)} tCO₂-eq`;
 
     this._renderEconomy(metrics);
@@ -793,69 +821,7 @@ export class UIController {
   }
 
   _drawScoreTrend(history) {
-    const ctx = this.scoreTrendContext;
-    if (!ctx) return;
-    const { width, height } = ctx.canvas;
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "rgba(6, 12, 20, 0.75)";
-    ctx.fillRect(0, 0, width, height);
-
-    if (!history.length) {
-      return;
-    }
-
-    const min = Math.min(50, ...history);
-    const max = Math.max(95, ...history);
-    const range = Math.max(1, max - min);
-    const gutterX = 4;
-    const gutterY = 4;
-
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 4]);
-    const targetNormalized = (75 - min) / range;
-    const targetY = height - gutterY - targetNormalized * (height - gutterY * 2);
-    const clampedTargetY = Math.min(height - gutterY, Math.max(gutterY, targetY));
-    ctx.beginPath();
-    ctx.moveTo(gutterX, clampedTargetY);
-    ctx.lineTo(width - gutterX, clampedTargetY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const points = history.map((value, index) => {
-      const x =
-        gutterX +
-        (index / Math.max(1, history.length - 1)) * (width - gutterX * 2);
-      const normalized = (value - min) / range;
-      const y = height - gutterY - normalized * (height - gutterY * 2);
-      return { x, y };
-    });
-
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      if (index === 0) {
-        ctx.moveTo(point.x, point.y);
-      } else {
-        ctx.lineTo(point.x, point.y);
-      }
-    });
-    ctx.lineTo(points[points.length - 1].x, height - gutterY);
-    ctx.lineTo(points[0].x, height - gutterY);
-    ctx.closePath();
-    ctx.fillStyle = "rgba(88, 217, 149, 0.18)";
-    ctx.fill();
-
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      if (index === 0) {
-        ctx.moveTo(point.x, point.y);
-      } else {
-        ctx.lineTo(point.x, point.y);
-      }
-    });
-    ctx.strokeStyle = "#58d995";
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    drawScoreTrend(this.scoreTrendContext, history);
   }
 
   _renderLogistics(logistics) {

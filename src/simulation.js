@@ -1,26 +1,24 @@
 import { MISSIONS } from "./content/missions.js";
 import { MarketSystem } from "./systems/MarketSystem.js";
 import { LogisticsSystem } from "./systems/LogisticsSystem.js";
+import { SupplyChainSystem } from "./systems/SupplyChainSystem.js";
+import { StaffingSystem } from "./systems/StaffingSystem.js";
+import { BlendingSystem } from "./systems/BlendingSystem.js";
+import { DisasterSystem } from "./systems/DisasterSystem.js";
+import { MaintenanceSystem } from "./systems/MaintenanceSystem.js";
+import { TimeMachineSystem } from "./systems/TimeMachineSystem.js";
+import { SCENARIOS, UNIT_DEFINITIONS, SPEED_PRESETS, DEFAULT_PARAMS, BASE_PRICES } from "./simulation/constants.js";
+import { clamp, perDayToPerHour, perHourToPerDay } from "./simulation/utils/calculations.js";
+import {
+  calculateProductShares,
+  calculateEnvironmentMetrics,
+  shouldLogEnvironmentWarning,
+  getEnvironmentWarningSeverity,
+  formatEnvironmentWarning,
+} from "./simulation/processors/index.js";
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-const randomRange = (min, max) => min + Math.random() * (max - min);
-
-const PRODUCT_LABELS = {
-  gasoline: "gasoline",
-  diesel: "diesel",
-  jet: "jet fuel",
-};
-
+const PRODUCT_LABELS = { gasoline: "gasoline", diesel: "diesel", jet: "jet fuel" };
 const HOURS_PER_DAY = 24;
-const perDayToPerHour = (value) => value / HOURS_PER_DAY;
-const perHourToPerDay = (value) => value * HOURS_PER_DAY;
-
-const SHIPMENT_PARCEL_SIZES = {
-  gasoline: 44,
-  diesel: 36,
-  jet: 30,
-};
-
 const SHIPMENT_HORIZON_HOURS = 48;
 const BASE_CRUDE_THROUGHPUT = 120;
 
@@ -35,26 +33,14 @@ export class RefinerySimulation {
     this.minSpeedMultiplier = 0.25;
     this.maxSpeedMultiplier = 4;
     this.speed = this.baseSpeed * this.speedMultiplier;
-    this.speedPresets = [
-      { label: "0.25x", value: 0.25 },
-      { label: "0.5x", value: 0.5 },
-      { label: "1x", value: 1 },
-      { label: "2x", value: 2 },
-      { label: "4x", value: 4 },
-    ];
+    this.speedPresets = SPEED_PRESETS;
     this._accumulator = 0;
     this.running = true;
     this.stepOnce = false;
 
     this.logs = [];
 
-    this.params = {
-      crudeIntake: 120, // kbpd
-      productFocus: 0.5, // 0 diesel, 1 gasoline
-      maintenance: 0.65,
-      safety: 0.45,
-      environment: 0.35,
-    };
+    this.params = { ...DEFAULT_PARAMS };
 
     this.scenarios = this._createScenarios();
     this.activeScenarioKey = "steady";
@@ -87,6 +73,8 @@ export class RefinerySimulation {
       reliability: 1,
       carbon: 0,
       waste: 0,
+      crudeThroughput: 0,
+      cduCapacity: 0,
       flareLevel: 0,
       operationalStrain: 0,
       incidents: 0,
@@ -121,6 +109,14 @@ export class RefinerySimulation {
 
     this.logisticsSystem = new LogisticsSystem(this);
     this.storage = this.logisticsSystem.storage; // Legacy reference
+
+    // New game feature systems (from game-features-list.md)
+    this.supplyChainSystem = new SupplyChainSystem(this);
+    this.staffingSystem = new StaffingSystem(this);
+    this.blendingSystem = new BlendingSystem(this);
+    this.disasterSystem = new DisasterSystem(this);
+    this.maintenanceSystem = new MaintenanceSystem(this);
+    this.timeMachineSystem = new TimeMachineSystem(this);
 
     // Alias logistics state for legacy access
     this.shipments = this.logisticsSystem.shipments;
@@ -197,108 +193,13 @@ export class RefinerySimulation {
   set storageUpgrades(val) { this.logisticsSystem.storageUpgrades = val; }
 
   _createScenarios() {
-    return {
-      steady: {
-        key: "steady",
-        name: "Steady Operations",
-        description: "Balanced demand and average Bay Area crude quality.",
-        crudeMultiplier: 1,
-        qualityShift: 0,
-        priceModifier: 1,
-        gasolineBias: 0,
-        dieselBias: 0,
-        jetBias: 0,
-        riskMultiplier: 1,
-        maintenancePenalty: 0,
-        environmentPressure: 0.2,
-      },
-      summerRush: {
-        key: "summerRush",
-        name: "Summer Driving Rush",
-        description:
-          "Gasoline demand surges with tourist traffic. Lighter crudes are available but the plant runs hot.",
-        crudeMultiplier: 1.05,
-        qualityShift: -0.05,
-        priceModifier: 1.08,
-        gasolineBias: 0.24,
-        dieselBias: -0.12,
-        jetBias: -0.05,
-        riskMultiplier: 1.12,
-        maintenancePenalty: 0.05,
-        environmentPressure: 0.1,
-      },
-      winterDiesel: {
-        key: "winterDiesel",
-        name: "Winter Heating Demand",
-        description:
-          "Heating oil and diesel spike while heavy, sour crude dominates supply.",
-        crudeMultiplier: 0.95,
-        qualityShift: 0.08,
-        priceModifier: 1.02,
-        gasolineBias: -0.1,
-        dieselBias: 0.28,
-        jetBias: -0.04,
-        riskMultiplier: 1.2,
-        maintenancePenalty: 0.12,
-        environmentPressure: 0.28,
-      },
-      exportPush: {
-        key: "exportPush",
-        name: "Pacific Jet Fuel Push",
-        description:
-          "Airlines pre-buy jet fuel for Pacific routes. Margins improve for kerosene and hydrogen-hungry units.",
-        crudeMultiplier: 1,
-        qualityShift: -0.02,
-        priceModifier: 1.06,
-        gasolineBias: -0.04,
-        dieselBias: -0.08,
-        jetBias: 0.32,
-        riskMultiplier: 1.15,
-        maintenancePenalty: 0.08,
-        environmentPressure: 0.18,
-      },
-      maintenanceCrunch: {
-        key: "maintenanceCrunch",
-        name: "Deferred Maintenance",
-        description:
-          "Budget cuts delayed turnarounds. Equipment is fragile and utilities are strained.",
-        crudeMultiplier: 0.9,
-        qualityShift: 0.05,
-        priceModifier: 0.97,
-        gasolineBias: 0,
-        dieselBias: 0.05,
-        jetBias: 0,
-        riskMultiplier: 1.45,
-        maintenancePenalty: 0.3,
-        environmentPressure: 0.35,
-      },
-      quakeDrill: {
-        key: "quakeDrill",
-        name: "Earthquake Drill",
-        description:
-          "A simulated quake tests emergency response. Utilities cut, shipments disrupted, and accidents spike.",
-        crudeMultiplier: 0.82,
-        qualityShift: 0.12,
-        priceModifier: 1.11,
-        gasolineBias: -0.06,
-        dieselBias: 0.12,
-        jetBias: 0,
-        riskMultiplier: 1.85,
-        maintenancePenalty: 0.42,
-        environmentPressure: 0.42,
-      },
-    };
+    return SCENARIOS;
   }
 
   _createUnits() {
-    return [
-      this._unit("distillation", "Crude Distillation Unit", 180, "core"),
-      this._unit("reformer", "Naphtha Reformer", 60, "naphtha"),
-      this._unit("fcc", "Catalytic Cracker", 85, "conversion"),
-      this._unit("hydrocracker", "Hydrocracker", 65, "conversion"),
-      this._unit("alkylation", "Alkylation", 45, "finishing"),
-      this._unit("sulfur", "Sulfur Recovery", 35, "support"),
-    ];
+    return UNIT_DEFINITIONS.map((def) =>
+      this._unit(def.id, def.name, def.capacity, def.category)
+    );
   }
 
   _createTopology() {
@@ -507,6 +408,8 @@ export class RefinerySimulation {
       reliability: 1,
       carbon: 0,
       waste: 0,
+      crudeThroughput: 0,
+      cduCapacity: 0,
       flareLevel: 0,
       operationalStrain: 0,
       incidents: 0,
@@ -537,6 +440,14 @@ export class RefinerySimulation {
     this.marketSystem.reset();
     this.market = this.marketSystem.state;
     this.logisticsSystem.reset();
+
+    // Reset new game feature systems
+    this.supplyChainSystem?.reset();
+    this.staffingSystem?.reset();
+    this.blendingSystem?.reset();
+    this.disasterSystem?.reset();
+    this.maintenanceSystem?.reset();
+    this.timeMachineSystem?.reset();
 
     this.activeInspections = [];
     this.completedInspections = [];
@@ -638,6 +549,11 @@ export class RefinerySimulation {
         : 0;
     const crudeThroughput = Math.min(crudeAvailable, distCapacity);
     const crudeThroughputPerDay = perHourToPerDay(crudeThroughput);
+
+    // Store actual throughput and CDU capacity in metrics for utilization calculation
+    this.metrics.crudeThroughput = crudeThroughputPerDay;
+    this.metrics.cduCapacity = distillation ? distillation.capacity : 180;
+
     if (distillation) {
       distillation.throughput = crudeThroughputPerDay;
       distillation.utilization = distillation.capacity
@@ -646,45 +562,16 @@ export class RefinerySimulation {
       this._updateUnitMode(distillation);
     }
 
-    // Product Production Logic (remains in main class as it touches all units)
+    // Calculate product shares using processor
     const focus = clamp(this.params.productFocus, 0, 1);
-    const centered = focus - 0.5;
+    const shares = calculateProductShares(scenario, focus);
 
-    let gasShare = clamp(0.08 + centered * 0.05, 0.035, 0.16);
-    let naphthaShare = clamp(0.36 + centered * 0.25, 0.26, 0.55);
-    let keroseneShare = 0.11 + scenario.jetBias * 0.05;
-    let dieselShare = clamp(0.27 - centered * 0.14 + scenario.dieselBias * 0.06, 0.18, 0.36);
-    let heavyShare = clamp(0.17 - centered * 0.06, 0.11, 0.26);
-
-    let residShare = Math.max(
-      0.06,
-      1 - (gasShare + naphthaShare + keroseneShare + dieselShare + heavyShare)
-    );
-
-    const qualityShift = scenario.qualityShift;
-    if (qualityShift !== 0) {
-      const heavyAdjust = 1 + qualityShift;
-      naphthaShare *= 1 - 0.35 * qualityShift;
-      dieselShare *= 1 - 0.18 * qualityShift;
-      heavyShare *= heavyAdjust;
-      residShare *= heavyAdjust * 1.2;
-    }
-
-    const totalShares =
-      gasShare + naphthaShare + keroseneShare + dieselShare + heavyShare + residShare;
-    gasShare /= totalShares;
-    naphthaShare /= totalShares;
-    keroseneShare /= totalShares;
-    dieselShare /= totalShares;
-    heavyShare /= totalShares;
-    residShare /= totalShares;
-
-    const distGas = crudeThroughput * gasShare;
-    let naphthaPool = crudeThroughput * naphthaShare;
-    let kerosenePool = crudeThroughput * keroseneShare;
-    let dieselPool = crudeThroughput * dieselShare;
-    let heavyPool = crudeThroughput * heavyShare;
-    let residPool = crudeThroughput * residShare;
+    const distGas = crudeThroughput * shares.gas;
+    let naphthaPool = crudeThroughput * shares.naphtha;
+    let kerosenePool = crudeThroughput * shares.kerosene;
+    let dieselPool = crudeThroughput * shares.diesel;
+    let heavyPool = crudeThroughput * shares.heavy;
+    let residPool = crudeThroughput * shares.resid;
 
     const result = {
       gasoline: 0,
@@ -873,18 +760,11 @@ export class RefinerySimulation {
       flare += diverted * 0.35;
     }
 
-    const basePrices = {
-      gasoline: 96,
-      diesel: 88,
-      jet: 112,
-      lpg: 54,
-    };
-
     const priceModifier = scenario.priceModifier;
-    const gasolinePrice = basePrices.gasoline * priceModifier * (1 + demandGasolineBias * 0.3);
-    const dieselPrice = basePrices.diesel * priceModifier * (1 + scenario.dieselBias * 0.25);
-    const jetPrice = basePrices.jet * priceModifier * (1 + demandJetBias * 0.35);
-    const lpgPrice = basePrices.lpg * priceModifier * (1 + demandGasolineBias * 0.1);
+    const gasolinePrice = BASE_PRICES.gasoline * priceModifier * (1 + demandGasolineBias * 0.3);
+    const dieselPrice = BASE_PRICES.diesel * priceModifier * (1 + scenario.dieselBias * 0.25);
+    const jetPrice = BASE_PRICES.jet * priceModifier * (1 + demandJetBias * 0.35);
+    const lpgPrice = BASE_PRICES.lpg * priceModifier * (1 + demandGasolineBias * 0.1);
 
     const crudeCostPerBbl = this.marketSystem.resolveCrudeCostPerBarrel(scenario);
     const maintenanceBudget =
@@ -921,50 +801,81 @@ export class RefinerySimulation {
         scenario
     });
 
+    // Update new game feature systems
+    const supplyChainReport = this.supplyChainSystem?.update(deltaMinutes, {
+        demandRate: crudeThroughputPerDay
+    });
+
+    const staffingEffects = this.staffingSystem?.update(deltaMinutes) || {
+        efficiency: 1,
+        operatorErrorRate: 0.02,
+        maintenanceBonus: 0,
+        safetyBonus: 0
+    };
+
+    this.blendingSystem?.update(deltaMinutes, {
+        autoBlend: true,
+        demand: {
+            regular: result.gasoline * 0.55,
+            midgrade: result.gasoline * 0.15,
+            premium: result.gasoline * 0.30
+        }
+    });
+
+    const disasterReport = this.disasterSystem?.update(deltaMinutes, {
+        units: this.units,
+        scenario
+    }) || { penalties: 0 };
+
+    const maintenanceReport = this.maintenanceSystem?.update(deltaMinutes, {
+        scenario,
+        staffingEffects
+    }) || {};
+
+    this.timeMachineSystem?.update(deltaMinutes);
+
+    // Apply staffing effects to reliability calculations
+    const staffingReliabilityBonus = staffingEffects.safetyBonus || 0;
+    const operatorErrorPenalty = staffingEffects.operatorErrorRate > 0.03 ?
+        (staffingEffects.operatorErrorRate - 0.02) * 500 : 0;
+
+    // Calculate environment metrics using processor
     const environmentLevel = clamp(this.params.environment ?? 0.35, 0, 1);
-    const carbonBase =
-      result.waste * 3.5 +
-      result.diesel * 0.6 +
-      result.gasoline * 0.5 +
-      incidentsRisk.incidents * 2.8;
-    const envMitigation = 1 - clamp(0.1 + environmentLevel * 0.55 + environmentLevel * environmentLevel * 0.32, 0, 0.88);
-    const carbonPerHour = carbonBase * envMitigation;
-    const carbonPerDay = perHourToPerDay(carbonPerHour);
-    const productionPerDay = perHourToPerDay(result.gasoline + result.diesel + result.jet);
-    const environmentTarget = clamp(
-      0.5 - environmentLevel * 0.28 + (scenario.environmentPressure || 0) * 0.05,
-      0.22,
-      0.55
-    );
-    const carbonIntensity = productionPerDay > 0 ? carbonPerDay / productionPerDay : carbonPerDay;
-    const envExcess = Math.max(0, carbonIntensity - environmentTarget);
-    let environmentPenalty = 0;
-    if (envExcess > 0) {
-      environmentPenalty = envExcess * productionPerDay * 9;
-      if (envExcess > 0.05) {
-        environmentPenalty *= 1.15;
-      }
-      const penaltySuppression = clamp(1 - environmentLevel * 1.05, 0, 1);
-      environmentPenalty *= penaltySuppression;
-    }
+    const envMetrics = calculateEnvironmentMetrics({
+      production: result,
+      incidents: incidentsRisk.incidents,
+      environmentLevel,
+      scenario,
+      crudeThroughput,
+    });
 
     if (this._environmentPenaltyCooldown > 0) {
       this._environmentPenaltyCooldown = Math.max(0, this._environmentPenaltyCooldown - hours);
     }
-    if (environmentPenalty > 4 && this._environmentPenaltyCooldown <= 0) {
+    if (shouldLogEnvironmentWarning(envMetrics.environmentPenalty, envMetrics.envExcess, this._environmentPenaltyCooldown)) {
       this.pushLog(
-        envExcess > 0.08 ? "warning" : "info",
-        `Environmental compliance drag: $${environmentPenalty.toFixed(1)}k this hour (intensity ${(carbonIntensity * 100).toFixed(1)}%).`
+        getEnvironmentWarningSeverity(envMetrics.envExcess),
+        formatEnvironmentWarning(envMetrics.environmentPenalty, envMetrics.carbonIntensity)
       );
       this._environmentPenaltyCooldown = 1.6;
     }
+    const environmentPenalty = envMetrics.environmentPenalty;
+    const carbonPerHour = envMetrics.carbonPerHour;
 
-    let penalty = incidentsRisk.incidentPenalty + logisticsReport.penalty + environmentPenalty;
+    // Add disaster penalties and operator error costs to total penalties
+    const disasterPenalty = disasterReport.penalties || 0;
+    let penalty = incidentsRisk.incidentPenalty + logisticsReport.penalty + environmentPenalty + disasterPenalty + operatorErrorPenalty;
+
+    // Add staffing labor costs and maintenance costs to fixed overhead
+    const laborCost = staffingEffects.laborCost || 0;
+    const maintenanceCost = this.maintenanceSystem?.getMaintenanceCostRate() || 0;
+    const demurrageCost = supplyChainReport?.demurrageCost || 0;
+
     const fixedOverhead = this.marketSystem.calculateFixedOverhead({
       crudeThroughput: crudeThroughputPerDay,
       scenario,
       params: this.params,
-    });
+    }) + laborCost + maintenanceCost + demurrageCost;
 
     // Update Market System
     const marketResult = this.marketSystem.update({
@@ -982,75 +893,12 @@ export class RefinerySimulation {
         timeMinutes: this.timeMinutes
     });
 
-    // Recalculate expenses based on market results
+    // Extract market results
     const marketConditions = marketResult.marketConditions;
     const economy = marketResult.economy;
-
     const adjustedRevenue = productRevenue * marketConditions.multiplier;
     const carryingCost = marketConditions.carryingCost;
     const totalOperatingExpense = operatingExpense + fixedOverhead + carryingCost + extraOperationalCost;
-
-    // MarketSystem update ran with "old" totalOperatingExpense if I passed it before calc?
-    // Actually `MarketSystem._updateEconomy` uses `totalOperatingExpense`.
-    // In original code:
-    // 1. Calc `marketConditions` (gives carryingCost).
-    // 2. Calc `totalOperatingExpense` using `carryingCost`.
-    // 3. Calc `economy` using `totalOperatingExpense`.
-    // My `MarketSystem.update` calls `_updateMarketConditions` then `_updateEconomy`.
-    // But `_updateEconomy` needs the correct `totalOperatingExpense`.
-    // I passed `totalOperatingExpense` to `update` but it was missing `carryingCost` at that point.
-    // I should probably pass `operatingExpense + fixedOverhead + extraOperationalCost` (partial) and let MarketSystem add carryingCost?
-    // OR just access `marketSystem.state` afterwards.
-
-    // Refinement: `MarketSystem.update` is doing too much or needs better args.
-    // For now, I'll stick to the original flow logic roughly:
-    // It seems `MarketSystem.update` uses `totalOperatingExpense` in `_updateEconomy`.
-    // I should fix `MarketSystem` to calculate `totalOperatingExpense` internally or expect the partial.
-    // BUT `MarketSystem` doesn't know about `extraOperationalCost` unless passed.
-
-    // Let's assume `MarketSystem.update` does its best.
-    // Wait, in `MarketSystem.js` I wrote: `const operationsPerBbl = ... totalOperatingExpense ...`.
-    // So it needs the full value.
-    // I will call `_updateMarketConditions` separately if I exposed it? No I exposed `update`.
-    // I will assume `MarketSystem` handles it...
-    // Actually, `MarketSystem` logic I wrote:
-    // `const marketConditions = this._updateMarketConditions(...)`
-    // `const economy = this._updateEconomy(..., totalOperatingExpense, ...)`
-    // The `totalOperatingExpense` passed to `update` is used in `_updateEconomy`.
-    // So I need to pass the FULL expense.
-    // But I don't know `carryingCost` until `_updateMarketConditions` runs!
-    // So I need to run `_updateMarketConditions` first, get cost, then run `_updateEconomy`.
-    // `MarketSystem` exposes `update` which does both.
-
-    // I should modify `MarketSystem` to calculate carrying cost inside `_updateEconomy`? No, `_updateEconomy` needs it.
-    // I will change `MarketSystem` to expose separate methods or fix `update`.
-    // Fixing `MarketSystem.js` would require another file write.
-    // Alternatively, I can call `update` twice? No that drifts state.
-
-    // Ideally I should have checked this dependency.
-    // Workaround: I will implement `_updateEconomy` locally again? No.
-    // I will modify `RefinerySimulation` to work around this if possible.
-    // Or I'll just accept that `carryingCost` might be from previous frame?
-    // No, `marketConditions` is calculated fresh.
-
-    // Let's re-read `MarketSystem.js` logic I wrote.
-    // `update(context)` -> calls `_updateMarketConditions`, then `_updateEconomy`.
-    // `_updateEconomy` uses `context.totalOperatingExpense`.
-    // `context` is passed ONCE.
-    // So `totalOperatingExpense` in `_updateEconomy` is what I passed.
-    // Whatever I pass must include `carryingCost`.
-    // But I don't know it yet.
-
-    // I must invoke `marketSystem.calculateMarketConditions(...)` (if it existed) -> get cost -> calc total -> invoke `marketSystem.updateEconomy(...)`.
-    // But I didn't expose those. I exposed `update`.
-
-    // I can modify `MarketSystem.js` to accept `baseOperatingExpense` and add `carryingCost` internally.
-    // Yes, that is the cleanest fix.
-    // I will plan to update `MarketSystem.js` after this file write.
-    // For now I will pass `operatingExpense + fixedOverhead + extraOperationalCost` as `baseOperatingExpense` in `context`.
-    // And in `MarketSystem`, I will change `totalOperatingExpense` usage to `base + carrying`.
-
-    // So in `RefinerySimulation`, I will pass `baseOperatingExpense`.
 
     const revenuePerHour = adjustedRevenue;
     const operatingExpensePerHour = totalOperatingExpense;
@@ -1081,7 +929,7 @@ export class RefinerySimulation {
     this.metrics.basisGasoline = economy.basis.gasoline;
     this.metrics.basisDiesel = economy.basis.diesel;
     this.metrics.basisJet = economy.basis.jet;
-    this.metrics.waste = result.waste;
+    this.metrics.waste = this._round(perHourToPerDay(result.waste));
     this.metrics.flareLevel = clamp((result.waste + flare * 1.4) / (crudeThroughput * 0.5 || 1), 0, 1);
     this.metrics.incidents = incidentsRisk.incidents;
     this.metrics.reliability = incidentsRisk.reliability;
@@ -1805,11 +1653,18 @@ export class RefinerySimulation {
     return this.logisticsSystem.expandStorageCapacity();
   }
 
-  togglePerformanceRecording() {
+  togglePerformanceRecording(options = {}) {
+    const { includeTimeMachine = false } = options;
+
     if (this.recorder?.active) {
       const summary = this._summarizeRecorderState();
       this.lastRecordingSummary = summary ? { ...summary } : null;
       this.recorder = this._createRecorderState();
+
+      // Also stop TimeMachine recording if it was started together
+      if (includeTimeMachine && this.timeMachineSystem?.recording?.active) {
+        this.timeMachineSystem.stopRecording();
+      }
 
       if (summary) {
         const duration = summary.durationHours || 0;
@@ -1837,6 +1692,15 @@ export class RefinerySimulation {
     this.recorder.active = true;
     this.recorder.startedAt = this.timeMinutes;
     this.recorder.lastUpdatedAt = this.timeMinutes;
+
+    // Also start TimeMachine recording for full state playback
+    if (includeTimeMachine && this.timeMachineSystem) {
+      this.timeMachineSystem.startRecording({
+        name: `Shift Recording ${this._formatTime()}`,
+        scenario: this.activeScenarioKey
+      });
+    }
+
     this.pushLog("info", "Shift recorder armed — capturing performance snapshot.");
     return { active: true, summary: null };
   }
@@ -1938,7 +1802,7 @@ export class RefinerySimulation {
     return true;
   }
 
-  scheduleTurnaround(unitId) {
+  scheduleTurnaround(unitId, options = {}) {
     if (!unitId) {
       this.pushLog("info", "Select a processing unit to schedule a turnaround.");
       return false;
@@ -1960,7 +1824,23 @@ export class RefinerySimulation {
       return false;
     }
 
-    const downtime = 180 + Math.random() * 180;
+    // Determine turnaround type from options or unit integrity
+    const turnaroundType = options.type || (unit.integrity < 0.4 ? 'major' : 'mini');
+    const baseDuration = turnaroundType === 'major' ? 480 : turnaroundType === 'standard' ? 360 : 180;
+    const downtime = baseDuration + Math.random() * (baseDuration * 0.5);
+
+    // Track in MaintenanceSystem if available
+    if (this.maintenanceSystem) {
+      const result = this.maintenanceSystem.scheduleTurnaround(unitId, turnaroundType, this.timeMinutes);
+      if (result.success && result.turnaround) {
+        // Mark as immediately starting
+        result.turnaround.status = 'in_progress';
+        result.turnaround.actualStart = this.timeMinutes;
+        this.maintenanceSystem.activeTurnarounds.push(result.turnaround);
+      }
+    }
+
+    // Apply turnaround immediately (backwards compatible)
     unit.status = "offline";
     unit.downtime = downtime;
     unit.throughput = 0;
@@ -1970,16 +1850,23 @@ export class RefinerySimulation {
     unit.alertDetail = {
       kind: "turnaround",
       severity: "warning",
-      summary: "Turnaround in progress",
+      summary: `${turnaroundType.charAt(0).toUpperCase() + turnaroundType.slice(1)} turnaround in progress`,
       cause: "Estimated " + Math.round(downtime) + " minutes until restart.",
       guidance: "Expect improved integrity once crews wrap up.",
       recordedAt: this._formatTime(),
     };
-    unit.integrity = clamp(unit.integrity + 0.3, 0, 1);
-    this.pendingOperationalCost += 340;
+
+    // Integrity boost based on turnaround type
+    const integrityBoost = turnaroundType === 'major' ? 0.5 : turnaroundType === 'standard' ? 0.35 : 0.2;
+    unit.integrity = clamp(unit.integrity + integrityBoost, 0, 1);
+
+    // Cost based on turnaround type
+    const cost = turnaroundType === 'major' ? 800 : turnaroundType === 'standard' ? 500 : 340;
+    this.pendingOperationalCost += cost;
+
     this.pushLog(
       "info",
-      unit.name + " turnaround scheduled; crews draining and opening equipment.",
+      unit.name + ` ${turnaroundType} turnaround started; crews draining and opening equipment.`,
       { unitId }
     );
     return true;
@@ -2319,6 +2206,172 @@ export class RefinerySimulation {
     return this.logisticsSystem.getStorageAlerts();
   }
 
+  // New game feature system getters (from game-features-list.md)
+
+  /**
+   * Get supply chain state including crude types and contracts
+   */
+  getSupplyChainState() {
+    if (!this.supplyChainSystem) return null;
+    return {
+      crudeTanks: this.supplyChainSystem._getTankLevels(),
+      crudeBlend: this.supplyChainSystem._calculateCrudeBlend(),
+      marineDock: this.supplyChainSystem._getMarineDockStatus(),
+      contracts: this.supplyChainSystem._getContractsSummary(),
+      pipelineIntake: { ...this.supplyChainSystem.pipelineIntake },
+      stats: { ...this.supplyChainSystem.stats }
+    };
+  }
+
+  /**
+   * Get staffing/HR system state
+   */
+  getStaffingState() {
+    if (!this.staffingSystem) return null;
+    return this.staffingSystem.getStatus();
+  }
+
+  /**
+   * Get blending system state
+   */
+  getBlendingState() {
+    if (!this.blendingSystem) return null;
+    return {
+      tanks: this.blendingSystem._getTankStatus(),
+      blendstocks: this.blendingSystem._getBlendstockStatus(),
+      quality: { ...this.blendingSystem.qualityMetrics },
+      additives: this.blendingSystem._getAdditiveStatus()
+    };
+  }
+
+  /**
+   * Get disaster system state
+   */
+  getDisasterState() {
+    if (!this.disasterSystem) return null;
+    return {
+      activeDisasters: this.disasterSystem.activeDisasters.map(d => this.disasterSystem._getDisasterStatus(d)),
+      deployedTeams: this.disasterSystem.deployedTeams.map(t => ({ ...t })),
+      evacuation: { ...this.disasterSystem.evacuation },
+      contamination: { ...this.disasterSystem.contamination },
+      dangerLevel: this.disasterSystem.getDangerLevel(),
+      stats: { ...this.disasterSystem.stats }
+    };
+  }
+
+  /**
+   * Get maintenance system state
+   */
+  getMaintenanceState() {
+    if (!this.maintenanceSystem) return null;
+    return {
+      unitHealth: this.maintenanceSystem._getUnitHealth(),
+      strategies: { ...this.maintenanceSystem.unitStrategies },
+      scheduledMaintenance: this.maintenanceSystem.scheduledMaintenance.map(m => ({ ...m })),
+      activeTurnarounds: this.maintenanceSystem.activeTurnarounds.map(t => ({ ...t })),
+      workOrders: this.maintenanceSystem.workOrders.filter(w => w.status !== 'completed').map(w => ({ ...w })),
+      sensors: { ...this.maintenanceSystem.sensors },
+      stats: { ...this.maintenanceSystem.stats }
+    };
+  }
+
+  /**
+   * Get Time Machine system state
+   */
+  getTimeMachineState() {
+    if (!this.timeMachineSystem) return null;
+    return {
+      recording: this.timeMachineSystem.getRecordingStatus(),
+      playback: this.timeMachineSystem.getPlaybackStatus(),
+      sessions: this.timeMachineSystem.getSavedSessions(),
+      markers: this.timeMachineSystem.getMarkers()
+    };
+  }
+
+  /**
+   * Start Time Machine recording
+   */
+  startRecording(metadata = {}) {
+    return this.timeMachineSystem?.startRecording(metadata);
+  }
+
+  /**
+   * Stop Time Machine recording
+   */
+  stopRecording() {
+    return this.timeMachineSystem?.stopRecording();
+  }
+
+  /**
+   * Start Time Machine playback
+   */
+  startPlayback(sessionId, options = {}) {
+    return this.timeMachineSystem?.startPlayback(sessionId, options);
+  }
+
+  /**
+   * Stop Time Machine playback
+   */
+  stopPlayback() {
+    return this.timeMachineSystem?.stopPlayback();
+  }
+
+  /**
+   * Create a procurement contract
+   */
+  createProcurementContract(options) {
+    return this.supplyChainSystem?.createContract(options);
+  }
+
+  /**
+   * Schedule a tanker delivery
+   */
+  scheduleTankerDelivery(options) {
+    return this.supplyChainSystem?.scheduleDelivery(options);
+  }
+
+  /**
+   * Set staffing target for a department
+   */
+  setStaffingTarget(departmentId, target) {
+    return this.staffingSystem?.setStaffingTarget(departmentId, target);
+  }
+
+  /**
+   * Start training program
+   */
+  startTrainingProgram(programId, departmentId = null) {
+    return this.staffingSystem?.startTraining(programId, departmentId);
+  }
+
+  /**
+   * Set maintenance strategy for a unit
+   */
+  setMaintenanceStrategy(unitId, strategyId) {
+    return this.maintenanceSystem?.setStrategy(unitId, strategyId);
+  }
+
+  /**
+   * Schedule a turnaround
+   */
+  scheduleTurnaround(unitId, turnaroundType, startTime = null) {
+    return this.maintenanceSystem?.scheduleTurnaround(unitId, turnaroundType, startTime);
+  }
+
+  /**
+   * Deploy emergency response team
+   */
+  deployEmergencyTeam(teamId, disasterId) {
+    return this.disasterSystem?.deployTeam(teamId, disasterId);
+  }
+
+  /**
+   * Blend gasoline to a specific grade
+   */
+  blendGasoline(gradeId, volumeKb) {
+    return this.blendingSystem?.blendGasoline(gradeId, volumeKb);
+  }
+
   getActiveAlerts() {
     const alerts = [];
     this.units.forEach((unit) => {
@@ -2452,6 +2505,13 @@ export class RefinerySimulation {
       performanceHistory: this.performanceHistory.map((entry) => ({ ...entry })),
       logs: this.logs.map((entry) => ({ ...entry })),
       market: this.getMarketState(),
+      // New system states
+      supplyChain: this.supplyChainSystem?.getState() || null,
+      staffing: this.staffingSystem?.getState() || null,
+      blending: this.blendingSystem?.getState() || null,
+      disaster: this.disasterSystem?.getState() || null,
+      maintenance: this.maintenanceSystem?.getState() || null,
+      timeMachine: this.timeMachineSystem?.getState() || null,
     };
 
     return snapshot;
@@ -2724,6 +2784,26 @@ export class RefinerySimulation {
         .slice(-80);
     } else {
       this.logs = [];
+    }
+
+    // Restore new system states
+    if (snapshot.supplyChain && this.supplyChainSystem) {
+      this.supplyChainSystem.restoreState(snapshot.supplyChain);
+    }
+    if (snapshot.staffing && this.staffingSystem) {
+      this.staffingSystem.restoreState(snapshot.staffing);
+    }
+    if (snapshot.blending && this.blendingSystem) {
+      this.blendingSystem.restoreState(snapshot.blending);
+    }
+    if (snapshot.disaster && this.disasterSystem) {
+      this.disasterSystem.restoreState(snapshot.disaster);
+    }
+    if (snapshot.maintenance && this.maintenanceSystem) {
+      this.maintenanceSystem.restoreState(snapshot.maintenance);
+    }
+    if (snapshot.timeMachine && this.timeMachineSystem) {
+      this.timeMachineSystem.restoreState(snapshot.timeMachine);
     }
 
     const storageLevels = this.storage?.levels || {};

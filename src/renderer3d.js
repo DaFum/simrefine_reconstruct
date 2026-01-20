@@ -1,6 +1,6 @@
 import * as THREE from "../vendor/three.module.js";
-
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+import { buildUnitMesh } from "./renderer/meshBuilders/index.js";
+import { clamp } from "./simulation/utils/calculations.js";
 const lerp = (start, end, t) => start + (end - start) * t;
 const damp = (current, target, lambda, dt) => lerp(current, target, 1 - Math.exp(-lambda * dt));
 
@@ -1026,187 +1026,18 @@ export class TileRenderer {
         metalness: 0.25,
         roughness: 0.46,
       });
-      const accentMeshes = [];
-      let body;
-      let cap = null;
-      let indicatorAnchor = baseHeight * 0.62;
+      const meshResult = buildUnitMesh(def.style, {
+        group,
+        baseWidth,
+        baseDepth,
+        baseHeight,
+        bodyMaterial,
+        accentMaterial,
+      });
 
-      switch (def.style) {
-        case "towers": {
-          const towerRadius = Math.min(baseWidth, baseDepth) * 0.18;
-          const towerSpacing = Math.min(baseWidth, baseDepth) * 0.42;
-          const heights = [baseHeight * 1.18, baseHeight * 0.94, baseHeight * 0.78];
-          const offsets = [-towerSpacing, 0, towerSpacing];
-          heights.forEach((height, index) => {
-            const radius = towerRadius * (index === 0 ? 1.08 : 0.94 - index * 0.04);
-            const shell = new THREE.Mesh(
-              new THREE.CylinderGeometry(radius, radius * 0.96, height, 28),
-              index === 0 ? bodyMaterial : accentMaterial.clone()
-            );
-            shell.position.set(offsets[index], height / 2, index === 1 ? towerSpacing * 0.25 : 0);
-            group.add(shell);
-            if (index === 0) {
-              body = shell;
-            } else {
-              accentMeshes.push(shell);
-            }
-          });
-          const walkway = new THREE.Mesh(
-            new THREE.TorusGeometry(towerRadius * 1.15, towerRadius * 0.08, 12, 32),
-            accentMaterial.clone()
-          );
-          walkway.rotation.x = Math.PI / 2;
-          walkway.position.y = heights[0] * 0.72;
-          group.add(walkway);
-          cap = walkway;
-          accentMeshes.push(walkway);
-
-          const stackHeight = heights[0] * 0.35;
-          const stack = new THREE.Mesh(
-            new THREE.CylinderGeometry(towerRadius * 0.42, towerRadius * 0.32, stackHeight, 20),
-            accentMaterial.clone()
-          );
-          stack.position.set(offsets[0] * 0.42, heights[0] - stackHeight / 2, 0);
-          group.add(stack);
-          accentMeshes.push(stack);
-
-          indicatorAnchor = heights[0] * 0.74;
-          break;
-        }
-        case "reactor": {
-          const pedestalHeight = Math.max(1.6, baseHeight * 0.32);
-          const pedestalRadius = Math.min(baseWidth, baseDepth) * 0.32;
-          const pedestal = new THREE.Mesh(
-            new THREE.CylinderGeometry(pedestalRadius * 0.95, pedestalRadius * 1.02, pedestalHeight, 32),
-            accentMaterial.clone()
-          );
-          pedestal.position.y = pedestalHeight / 2;
-          group.add(pedestal);
-          accentMeshes.push(pedestal);
-
-          const sphereRadius = Math.min(baseWidth, baseDepth) * 0.55;
-          const vessel = new THREE.Mesh(new THREE.SphereGeometry(sphereRadius, 40, 32), bodyMaterial);
-          vessel.position.y = pedestalHeight + sphereRadius;
-          group.add(vessel);
-          body = vessel;
-
-          const band = new THREE.Mesh(
-            new THREE.TorusGeometry(sphereRadius * 0.82, sphereRadius * 0.08, 16, 48),
-            accentMaterial.clone()
-          );
-          band.rotation.x = Math.PI / 2;
-          band.position.y = vessel.position.y;
-          group.add(band);
-          cap = band;
-          accentMeshes.push(band);
-
-          const riserHeight = sphereRadius * 1.2;
-          const riser = new THREE.Mesh(
-            new THREE.CylinderGeometry(sphereRadius * 0.2, sphereRadius * 0.16, riserHeight, 24),
-            accentMaterial.clone()
-          );
-          riser.position.set(sphereRadius * 0.48, pedestalHeight + sphereRadius * 1.1, 0);
-          group.add(riser);
-          accentMeshes.push(riser);
-
-          const cyclone = new THREE.Mesh(
-            new THREE.ConeGeometry(sphereRadius * 0.24, sphereRadius * 0.5, 24),
-            accentMaterial.clone()
-          );
-          cyclone.position.set(-sphereRadius * 0.6, pedestalHeight + sphereRadius * 1.4, 0);
-          group.add(cyclone);
-          accentMeshes.push(cyclone);
-
-          indicatorAnchor = pedestalHeight + sphereRadius * 1.35;
-          break;
-        }
-        case "support": {
-          const cradleHeight = baseHeight * 0.18;
-          const cradle = new THREE.Mesh(
-            new THREE.BoxGeometry(baseWidth * 0.92, cradleHeight, baseDepth * 0.74),
-            accentMaterial.clone()
-          );
-          cradle.position.y = cradleHeight / 2;
-          group.add(cradle);
-          accentMeshes.push(cradle);
-
-          const drumRadius = Math.min(baseHeight, baseDepth) * 0.36;
-          const drumLength = baseWidth * 0.95;
-          const drum = new THREE.Mesh(new THREE.CylinderGeometry(drumRadius, drumRadius, drumLength, 32), bodyMaterial);
-          drum.rotation.z = Math.PI / 2;
-          drum.position.y = cradleHeight + drumRadius;
-          group.add(drum);
-          body = drum;
-
-          const scrubber = new THREE.Mesh(
-            new THREE.CylinderGeometry(drumRadius * 0.28, drumRadius * 0.24, baseHeight * 0.65, 20),
-            accentMaterial.clone()
-          );
-          scrubber.position.set(0, drum.position.y + baseHeight * 0.32, baseDepth * 0.3);
-          group.add(scrubber);
-          cap = scrubber;
-          accentMeshes.push(scrubber);
-
-          indicatorAnchor = drum.position.y + baseHeight * 0.35;
-          break;
-        }
-        case "rect": {
-          const pedestalHeight = baseHeight * 0.18;
-          const pedestal = new THREE.Mesh(
-            new THREE.BoxGeometry(baseWidth * 0.98, pedestalHeight, baseDepth * 0.9),
-            accentMaterial.clone()
-          );
-          pedestal.position.y = pedestalHeight / 2;
-          group.add(pedestal);
-          accentMeshes.push(pedestal);
-
-          const blockHeight = baseHeight * 0.78;
-          const block = new THREE.Mesh(
-            new THREE.BoxGeometry(baseWidth * 0.9, blockHeight, baseDepth * 0.82),
-            bodyMaterial
-          );
-          block.position.y = pedestalHeight + blockHeight / 2;
-          group.add(block);
-          body = block;
-
-          const roofHeight = baseHeight * 0.12;
-          const roof = new THREE.Mesh(
-            new THREE.BoxGeometry(baseWidth * 0.94, roofHeight, baseDepth * 0.86),
-            accentMaterial.clone()
-          );
-          roof.position.y = pedestalHeight + blockHeight + roofHeight / 2;
-          group.add(roof);
-          cap = roof;
-          accentMeshes.push(roof);
-
-          const stack = new THREE.Mesh(
-            new THREE.CylinderGeometry(baseWidth * 0.08, baseWidth * 0.1, baseHeight * 0.82, 18),
-            accentMaterial.clone()
-          );
-          stack.position.set(-baseWidth * 0.28, pedestalHeight + blockHeight + baseHeight * 0.42, baseDepth * 0.18);
-          group.add(stack);
-          accentMeshes.push(stack);
-
-          indicatorAnchor = pedestalHeight + blockHeight + roofHeight * 0.6;
-          break;
-        }
-        default: {
-          const block = new THREE.Mesh(new THREE.BoxGeometry(baseWidth, baseHeight, baseDepth), bodyMaterial);
-          block.position.y = baseHeight / 2;
-          group.add(block);
-          body = block;
-
-          const topper = new THREE.Mesh(
-            new THREE.BoxGeometry(baseWidth * 0.78, baseHeight * 0.32, baseDepth * 0.78),
-            accentMaterial.clone()
-          );
-          topper.position.y = baseHeight + topper.geometry.parameters.height / 2 - 0.4;
-          group.add(topper);
-          cap = topper;
-          accentMeshes.push(topper);
-          break;
-        }
-      }
+      let { body, cap, accentMeshes, indicatorAnchor } = meshResult;
+      indicatorAnchor = indicatorAnchor || baseHeight * 0.62;
+      accentMeshes = accentMeshes || [];
 
       if (!body) {
         body = new THREE.Mesh(new THREE.BoxGeometry(baseWidth, baseHeight, baseDepth), bodyMaterial);

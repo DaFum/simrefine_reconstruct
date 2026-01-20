@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-vi.mock('../../src/simulation.js?v=3', () => {
+vi.mock('../../src/simulation.js', () => {
   return {
     RefinerySimulation: vi.fn(function() {
       return {
@@ -42,7 +42,7 @@ vi.mock('../../src/simulation.js?v=3', () => {
   };
 });
 
-vi.mock('../../src/ui.js?v=3', () => {
+vi.mock('../../src/ui.js', () => {
   return {
     UIController: vi.fn(function() {
       return {
@@ -59,7 +59,7 @@ vi.mock('../../src/ui.js?v=3', () => {
   };
 });
 
-vi.mock('../../src/renderer3d.js?v=3', () => {
+vi.mock('../../src/renderer3d.js', () => {
   return {
     TileRenderer: vi.fn(function() {
       return {
@@ -125,9 +125,9 @@ vi.mock('../../src/commandSystem.js', () => {
 vi.mock('../../src/themeManager.js', () => ({ ThemeManager: vi.fn() }));
 vi.mock('../../src/windowManager.js', () => ({ WindowManager: vi.fn() }));
 
-import { RefinerySimulation } from '../../src/simulation.js?v=3';
-import { UIController } from '../../src/ui.js?v=3';
-import { TileRenderer } from '../../src/renderer3d.js?v=3';
+import { RefinerySimulation } from '../../src/simulation.js';
+import { UIController } from '../../src/ui.js';
+import { TileRenderer } from '../../src/renderer3d.js';
 
 describe('Main Entry Point', () => {
   beforeEach(() => {
@@ -160,7 +160,21 @@ describe('Main Entry Point', () => {
       <button data-unit-target="distillation"></button>
       <button data-scenario="steady"></button>
       <div id="hud">
-        <input type="range" />
+        <input type="range" id="crude-input" />
+        <span id="crude-value"></span>
+        <input type="range" id="gasoline-focus" />
+        <span id="focus-value"></span>
+        <input type="range" id="maintenance" />
+        <span id="maintenance-value"></span>
+        <input type="range" id="safety" />
+        <span id="safety-value"></span>
+        <input type="range" id="env" />
+        <span id="env-value"></span>
+        <button id="toggle-sim"></button>
+        <button id="step-sim"></button>
+        <button id="reset-sim"></button>
+        <select id="scenario-select"></select>
+        <p id="scenario-description"></p>
       </div>
     `;
   });

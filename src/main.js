@@ -6,9 +6,9 @@ import { EventBus } from "./eventBus.js";
 import { CommandSystem } from "./commandSystem.js";
 import { ThemeManager } from "./themeManager.js";
 import { WindowManager } from "./windowManager.js";
-
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-const HOURS_PER_DAY = 24;
+import { UNIT_CONFIGS, PIPELINE_CONFIGS, OPERATION_PRESETS, SESSION_PRESETS } from "./config/index.js";
+import { TickerComponent } from "./ui/index.js";
+import { clamp } from "./simulation/utils/calculations.js";
 
 const mapViewport = document.getElementById("map-viewport");
 let sceneContainer = document.getElementById("scene-container");
@@ -51,157 +51,23 @@ if (typeof ui.setModeBadge === "function") {
 
 const windowManager = new WindowManager("desktop");
 
+// Initialize market ticker at bottom of screen
+const ticker = new TickerComponent({
+  container: document.body,
+  simulation: simulation,
+  updateInterval: 5000,
+  scrollSpeed: 50
+});
+
 const processTopology = simulation.getProcessTopology?.() || {};
 const unitConnectionIndex = buildUnitConnectionIndex(processTopology);
 
-const unitConfigs = [
-  {
-    id: "distillation",
-    name: "Crude Distillation",
-    tileX: 6,
-    tileY: 3,
-    width: 3,
-    height: 4,
-    color: 0xbec9df,
-    accent: 0xf3cf73,
-    accentAlt: 0xe8933d,
-    style: "towers",
-  },
-  {
-    id: "reformer",
-    name: "Naphtha Reformer",
-    tileX: 3,
-    tileY: 6,
-    width: 2,
-    height: 3,
-    color: 0xd6aa80,
-    accent: 0x8c5a31,
-    accentAlt: 0xf2d5a4,
-    style: "rect",
-  },
-  {
-    id: "fcc",
-    name: "Catalytic Cracker",
-    tileX: 10,
-    tileY: 6,
-    width: 3,
-    height: 3,
-    color: 0xe2c568,
-    accent: 0x9a6a24,
-    accentAlt: 0xf6df9a,
-    style: "reactor",
-  },
-  {
-    id: "hydrocracker",
-    name: "Hydrocracker",
-    tileX: 3,
-    tileY: 2,
-    width: 2,
-    height: 3,
-    color: 0xb6ded0,
-    accent: 0x419a74,
-    accentAlt: 0xdaf0e8,
-    style: "towers",
-  },
-  {
-    id: "alkylation",
-    name: "Alkylation",
-    tileX: 11,
-    tileY: 2,
-    width: 2,
-    height: 3,
-    color: 0xd3b3f2,
-    accent: 0x845ec4,
-    accentAlt: 0xf3e1ff,
-    style: "rect",
-  },
-  {
-    id: "sulfur",
-    name: "Sulfur Recovery",
-    tileX: 7,
-    tileY: 9,
-    width: 2,
-    height: 2,
-    color: 0xe9edf1,
-    accent: 0x8c96a7,
-    accentAlt: 0xf7f9fb,
-    style: "support",
-  },
-];
-
-const pipelineConfigs = [
-  {
-    id: "toReformer",
-    metric: "toReformer",
-    capacity: 70 / HOURS_PER_DAY,
-    color: 0x6fc2ff,
-    phase: 0,
-    path: [
-      { unit: "distillation", anchor: "west", dy: -0.2 },
-      { x: 5.6, y: 4.5 },
-      { x: 5.2, y: 7.1 },
-      { unit: "reformer", anchor: "east", dy: -0.1 },
-    ],
-  },
-  {
-    id: "toCracker",
-    metric: "toCracker",
-    capacity: 90 / HOURS_PER_DAY,
-    color: 0xf7b25c,
-    phase: 1.3,
-    path: [
-      { unit: "distillation", anchor: "east", dy: -0.25 },
-      { x: 9.5, y: 4.5 },
-      { x: 9.7, y: 6.8 },
-      { unit: "fcc", anchor: "west", dy: -0.1 },
-    ],
-  },
-  {
-    id: "toHydrocracker",
-    metric: "toHydrocracker",
-    capacity: 70 / HOURS_PER_DAY,
-    color: 0x8ee2c4,
-    phase: 2.2,
-    path: [
-      { unit: "distillation", anchor: "north", dx: 0.2 },
-      { x: 4.6, y: 3.2 },
-      { unit: "hydrocracker", anchor: "south", dx: 0.1 },
-    ],
-  },
-  {
-    id: "toAlkylation",
-    metric: "toAlkylation",
-    capacity: 45 / HOURS_PER_DAY,
-    color: 0xc5a1ff,
-    phase: 2.9,
-    path: [
-      { unit: "fcc", anchor: "east", dy: -0.15 },
-      { x: 12, y: 6.9 },
-      { unit: "alkylation", anchor: "west", dy: -0.1 },
-    ],
-  },
-  {
-    id: "toExport",
-    metric: "toExport",
-    capacity: 160 / HOURS_PER_DAY,
-    color: 0x9ec8ff,
-    phase: 3.6,
-    path: [
-      { unit: "distillation", anchor: "east", dy: 0.3 },
-      { x: 11, y: 4.8 },
-      { x: 11.3, y: 9.4 },
-      { x: 13.6, y: 9.4 },
-    ],
-  },
-];
-
-
-const renderer = new TileRenderer(sceneContainer, simulation, unitConfigs, pipelineConfigs);
+const renderer = new TileRenderer(sceneContainer, simulation, UNIT_CONFIGS, PIPELINE_CONFIGS);
 new ThemeManager(renderer, eventBus);
 const surface = renderer.getSurface();
 
 // Expose for debugging after all systems are initialized
-window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem };
+window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem, ticker };
 
 const unitPulseEntries = new Map();
 const unitModeLabels = new Map();
@@ -214,35 +80,7 @@ let activeMenu = null;
 let panPointerId = null;
 let panMoved = false;
 let panStart = { x: 0, y: 0 };
-const PRESETS = {
-  auto: {
-    label: "AUTO",
-    crude: 120,
-    focus: 0.5,
-    maintenance: 0.65,
-    safety: 0.45,
-    environment: 0.35,
-    log: "Operator returned controls to automatic balancing.",
-  },
-  manual: {
-    label: "MANUAL",
-    crude: 180,
-    focus: 0.68,
-    maintenance: 0.45,
-    safety: 0.36,
-    environment: 0.22,
-    log: "Manual push: throughput prioritized for gasoline blending.",
-  },
-  shutdown: {
-    label: "SHUTDN",
-    crude: 0,
-    focus: 0.5,
-    maintenance: 0.82,
-    safety: 0.72,
-    environment: 0.55,
-    log: "Emergency shutdown drill initiated.",
-  },
-};
+const PRESETS = OPERATION_PRESETS;
 
 // --- Event Listeners for Visual Feedback ---
 eventBus.on("INSPECTION_STARTED", ({ unitId }) => {
@@ -280,66 +118,6 @@ function updateRecordButtonState(active) {
   recordToolbarButton.setAttribute("aria-pressed", recording ? "true" : "false");
   recordToolbarButton.textContent = recording ? "REC" : "RECORD";
 }
-
-const SESSION_PRESETS = {
-  legacy: {
-    scenario: "maintenanceCrunch",
-    params: {
-      crude: 112,
-      focus: 0.46,
-      maintenance: 0.38,
-      safety: 0.34,
-      environment: 0.28,
-    },
-    storageLevels: { gasoline: 212, diesel: 158, jet: 122 },
-    shipments: [
-      { product: "gasoline", volume: 88, window: 4.2, dueIn: 0.9 },
-      { product: "diesel", volume: 74, window: 3.8, dueIn: 0.6 },
-    ],
-    shipmentStats: { total: 4, onTime: 2, missed: 2 },
-    nextShipmentIn: 0.8,
-    units: [
-      { id: "distillation", integrity: 0.58 },
-      { id: "reformer", integrity: 0.4 },
-      { id: "fcc", integrity: 0.45 },
-      { id: "hydrocracker", integrity: 0.42, downtime: 95 },
-      { id: "alkylation", integrity: 0.5 },
-      { id: "sulfur", integrity: 0.56 },
-    ],
-    marketStress: 0.44,
-    timeMinutes: 60 * 9,
-    log: "Recovered training save loaded — tanks brimmed and maintenance overdue.",
-  },
-  modern: {
-    scenario: "exportPush",
-    params: {
-      crude: 168,
-      focus: 0.64,
-      maintenance: 0.55,
-      safety: 0.48,
-      environment: 0.32,
-    },
-    storageLevels: { gasoline: 126, diesel: 104, jet: 68 },
-    shipments: [
-      { product: "jet", volume: 82, window: 5.5, dueIn: 1.6 },
-      { product: "gasoline", volume: 64, window: 4.8, dueIn: 2.1 },
-    ],
-    shipmentStats: { total: 3, onTime: 1, missed: 0 },
-    nextShipmentIn: 1.4,
-    units: [
-      { id: "reformer", integrity: 0.72 },
-      { id: "hydrocracker", integrity: 0.68 },
-      { id: "alkylation", integrity: 0.74 },
-    ],
-    unitOverrides: {
-      hydrocracker: { throttle: 1.08 },
-      sulfur: { throttle: 1.05 },
-    },
-    marketStress: 0.3,
-    timeMinutes: 60 * 3,
-    log: "Modernization drill loaded — chase export contracts without breaking reliability.",
-  },
-};
 
 const toolbarPresetButtons = document.querySelectorAll("[data-preset]");
 const toolbarUnitButtons = document.querySelectorAll("[data-unit-target]");
@@ -628,6 +406,7 @@ function animate(now) {
   updateRecordButtonState(Boolean(recorderState?.active));
   renderer.render(delta, { flows, logistics: logisticsState });
   ui.update(logisticsState, flows);
+  ticker.update(simulation);
   refreshUnitPulse(now / 1000);
   requestAnimationFrame(animate);
 }
