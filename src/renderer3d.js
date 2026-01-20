@@ -119,6 +119,12 @@ export class TileRenderer {
     this._initActionToys();
     /** @type {THREE.Object3D[]} Pool of reusable smoke sprite meshes for performance optimization. */
     this.smokePool = [];
+    /** @type {THREE.Object3D[]} Pool of reusable ripple meshes. */
+    this.ripplePool = [];
+    /** @type {THREE.Object3D[]} Pool of reusable scan meshes. */
+    this.scanPool = [];
+    /** @type {THREE.Object3D[]} Pool of reusable pulse sprites. */
+    this.pulsePool = [];
   }
 
   setPalette(paletteDef) {
@@ -748,9 +754,15 @@ export class TileRenderer {
       if (t >= 1) {
         if (fx.mesh) {
             this.scene.remove(fx.mesh);
+            fx.mesh.visible = false;
             if (fx.type === 'smoke') {
-                fx.mesh.visible = false;
                 this.smokePool.push(fx.mesh);
+            } else if (fx.type === 'ripple') {
+                this.ripplePool.push(fx.mesh);
+            } else if (fx.type === 'scan') {
+                this.scanPool.push(fx.mesh);
+            } else if (fx.type === 'pulse') {
+                this.pulsePool.push(fx.mesh);
             } else {
                 if (fx.mesh.geometry) fx.mesh.geometry.dispose();
                 if (fx.mesh.material) fx.mesh.material.dispose();
@@ -793,15 +805,23 @@ export class TileRenderer {
   }
 
   spawnRipple(x, z) {
-    const geometry = new THREE.RingGeometry(0.5, 0.8, 32);
-    const material = new THREE.MeshBasicMaterial({
+    let mesh;
+    if (this.ripplePool.length > 0) {
+      mesh = this.ripplePool.pop();
+      mesh.scale.set(1, 1, 1);
+      mesh.material.opacity = 0.8;
+      mesh.visible = true;
+    } else {
+      const geometry = new THREE.RingGeometry(0.5, 0.8, 32);
+      const material = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0.8,
         side: THREE.DoubleSide
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.x = -Math.PI / 2;
+      });
+      mesh = new THREE.Mesh(geometry, material);
+      mesh.rotation.x = -Math.PI / 2;
+    }
     mesh.position.set(x, 0.2, z);
 
     this.scene.add(mesh);
@@ -816,15 +836,22 @@ export class TileRenderer {
   }
 
   spawnScan(x, z, height) {
-      const geometry = new THREE.CylinderGeometry(8, 8, 0.5, 32, 1, true);
-      const material = new THREE.MeshBasicMaterial({
-          color: 0x66f5ff,
-          transparent: true,
-          opacity: 0.4,
-          side: THREE.DoubleSide,
-          blending: THREE.AdditiveBlending
-      });
-      const mesh = new THREE.Mesh(geometry, material);
+      let mesh;
+      if (this.scanPool.length > 0) {
+        mesh = this.scanPool.pop();
+        mesh.material.opacity = 0.4;
+        mesh.visible = true;
+      } else {
+        const geometry = new THREE.CylinderGeometry(8, 8, 0.5, 32, 1, true);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x66f5ff,
+            transparent: true,
+            opacity: 0.4,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending
+        });
+        mesh = new THREE.Mesh(geometry, material);
+      }
       mesh.position.set(x, 0, z);
       this.scene.add(mesh);
 
@@ -881,15 +908,22 @@ export class TileRenderer {
       const count = 5;
       for (let i=0; i<count; i++) {
           const delay = i * 0.15;
-          const material = new THREE.SpriteMaterial({
-              map: this.effectTextures.glow,
-              color: 0xffd700,
-              transparent: true,
-              opacity: 1,
-              blending: THREE.AdditiveBlending
-          });
-          const sprite = new THREE.Sprite(material);
-          sprite.scale.set(1.5, 1.5, 1);
+          let sprite;
+          if (this.pulsePool.length > 0) {
+              sprite = this.pulsePool.pop();
+              sprite.material.opacity = 1;
+              sprite.visible = true;
+          } else {
+              const material = new THREE.SpriteMaterial({
+                  map: this.effectTextures.glow,
+                  color: 0xffd700,
+                  transparent: true,
+                  opacity: 1,
+                  blending: THREE.AdditiveBlending
+              });
+              sprite = new THREE.Sprite(material);
+              sprite.scale.set(1.5, 1.5, 1);
+          }
           sprite.position.copy(path.getPoint(0));
 
           // Delay start by manipulating age/duration? No, better to spawn them delayed.
