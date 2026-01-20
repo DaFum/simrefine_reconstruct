@@ -1161,7 +1161,7 @@ export class TileRenderer {
 
       const glowGeometry = tubeGeometry.clone();
       const glowMaterial = new THREE.MeshStandardMaterial({
-        color: baseColor.clone().lerp(new THREE.Color(0xffffff), 0.35),
+      color: baseColor.clone().lerp(COLOR_WHITE, 0.35),
         emissive: baseColor.clone().multiplyScalar(0.6),
         emissiveIntensity: 0.0,
         metalness: 0.2,
@@ -1702,7 +1702,7 @@ export class TileRenderer {
     group.add(radar);
 
     const railMaterial = new THREE.MeshStandardMaterial({
-      color: baseColor.clone().lerp(new THREE.Color(0xffffff), 0.7),
+      color: baseColor.clone().lerp(COLOR_WHITE, 0.7),
       metalness: 0.4,
       roughness: 0.25,
     });
@@ -1716,7 +1716,7 @@ export class TileRenderer {
 
     const cargoGroup = new THREE.Group();
     const cargoMaterial = new THREE.MeshStandardMaterial({
-      color: baseColor.clone().lerp(new THREE.Color(0xffffff), 0.2),
+      color: baseColor.clone().lerp(COLOR_WHITE, 0.2),
       metalness: 0.16,
       roughness: 0.52,
     });
@@ -1729,7 +1729,7 @@ export class TileRenderer {
     }
     group.add(cargoGroup);
 
-    const navLight = new THREE.PointLight(baseColor.clone().lerp(new THREE.Color(0xffffff), 0.35), 0.48, 42, 2.4);
+    const navLight = new THREE.PointLight(baseColor.clone().lerp(COLOR_WHITE, 0.35), 0.48, 42, 2.4);
     navLight.position.set(hullLength * 0.34, hullHeight + bridgeHeight + 0.46, 0);
     group.add(navLight);
 
@@ -2023,7 +2023,7 @@ export class TileRenderer {
     if (!initial) {
       for (const pipeline of this.pipelineMeshes.values()) {
         pipeline.mesh.material.color.copy(pipeline.baseColor);
-        pipeline.glow.material.color.copy(pipeline.baseColor.clone().lerp(new THREE.Color(0xffffff), 0.35));
+        pipeline.glow.material.color.copy(pipeline.baseColor.clone().lerp(COLOR_WHITE, 0.35));
       }
       for (const tank of this.storageMeshes.values()) {
         const material = tank.label.material;
