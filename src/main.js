@@ -7,6 +7,7 @@ import { CommandSystem } from "./commandSystem.js";
 import { ThemeManager } from "./themeManager.js";
 import { WindowManager } from "./windowManager.js";
 import { UNIT_CONFIGS, PIPELINE_CONFIGS, OPERATION_PRESETS, SESSION_PRESETS } from "./config/index.js";
+import { TickerComponent } from "./ui/index.js";
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -51,6 +52,14 @@ if (typeof ui.setModeBadge === "function") {
 
 const windowManager = new WindowManager("desktop");
 
+// Initialize market ticker at bottom of screen
+const ticker = new TickerComponent({
+  container: document.body,
+  simulation: simulation,
+  updateInterval: 5000,
+  scrollSpeed: 50
+});
+
 const processTopology = simulation.getProcessTopology?.() || {};
 const unitConnectionIndex = buildUnitConnectionIndex(processTopology);
 
@@ -59,7 +68,7 @@ new ThemeManager(renderer, eventBus);
 const surface = renderer.getSurface();
 
 // Expose for debugging after all systems are initialized
-window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem };
+window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem, ticker };
 
 const unitPulseEntries = new Map();
 const unitModeLabels = new Map();
@@ -398,6 +407,7 @@ function animate(now) {
   updateRecordButtonState(Boolean(recorderState?.active));
   renderer.render(delta, { flows, logistics: logisticsState });
   ui.update(logisticsState, flows);
+  ticker.update(simulation);
   refreshUnitPulse(now / 1000);
   requestAnimationFrame(animate);
 }

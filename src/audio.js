@@ -68,6 +68,25 @@ export class AudioController {
     this.sounds.set('warning', () => this._createOscillatorSound('sawtooth', 200, 0.3, 0.3));
     this.sounds.set('error', () => this._createOscillatorSound('sawtooth', 100, 0.4, 0.4));
     this.sounds.set('alert', () => this._createAlertSound());
+
+    // Enhanced alarm sounds for different priority levels (from game-features-list.md)
+    this.sounds.set('alarm_low', () => this._createLowPriorityAlarm());      // Low = Beep
+    this.sounds.set('alarm_medium', () => this._createMediumPriorityAlarm()); // Medium = Double beep
+    this.sounds.set('alarm_high', () => this._createHighPriorityAlarm());    // High = Siren
+
+    // Ambient/atmospheric sounds
+    this.sounds.set('pump_hum', () => this._createPumpHum());
+    this.sounds.set('steam_hiss', () => this._createSteamHiss());
+    this.sounds.set('machinery', () => this._createMachineryLoop());
+
+    // Disaster-related sounds
+    this.sounds.set('fire_crackle', () => this._createFireCrackle());
+    this.sounds.set('explosion', () => this._createExplosionSound());
+    this.sounds.set('evacuation', () => this._createEvacuationAlarm());
+
+    // Transaction/economy sounds
+    this.sounds.set('cash_register', () => this._createCashRegister());
+    this.sounds.set('contract_signed', () => this._createContractSigned());
   }
 
   play(name) {
@@ -162,5 +181,324 @@ export class AudioController {
 
     osc.start();
     osc.stop(this.context.currentTime + 0.6);
+  }
+
+  // Low priority alarm - single soft beep
+  _createLowPriorityAlarm() {
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, this.context.currentTime);
+
+    gain.gain.setValueAtTime(0.15, this.context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.2);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.context.currentTime + 0.2);
+  }
+
+  // Medium priority alarm - double beep
+  _createMediumPriorityAlarm() {
+    const now = this.context.currentTime;
+
+    for (let i = 0; i < 2; i++) {
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1200, now + i * 0.2);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.setValueAtTime(0.2, now + i * 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.2 + 0.1);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now + i * 0.2);
+      osc.stop(now + i * 0.2 + 0.1);
+    }
+  }
+
+  // High priority alarm - siren
+  _createHighPriorityAlarm() {
+    const now = this.context.currentTime;
+    const duration = 1.2;
+
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+
+    osc.type = 'sawtooth';
+    // Siren oscillation between two frequencies
+    osc.frequency.setValueAtTime(800, now);
+    osc.frequency.linearRampToValueAtTime(1200, now + 0.3);
+    osc.frequency.linearRampToValueAtTime(800, now + 0.6);
+    osc.frequency.linearRampToValueAtTime(1200, now + 0.9);
+    osc.frequency.linearRampToValueAtTime(800, now + 1.2);
+
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.linearRampToValueAtTime(0.01, now + duration);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+
+  // Pump hum - continuous low frequency
+  _createPumpHum() {
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(60, this.context.currentTime);
+
+    gain.gain.setValueAtTime(0.03, this.context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.5);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.context.currentTime + 0.5);
+  }
+
+  // Steam hiss - filtered noise
+  _createSteamHiss() {
+    const bufferSize = this.context.sampleRate * 0.5;
+    const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = this.context.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.context.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 3000;
+
+    const gain = this.context.createGain();
+    gain.gain.setValueAtTime(0.1, this.context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.4);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    noise.start();
+  }
+
+  // Machinery loop - rhythmic pulsing
+  _createMachineryLoop() {
+    const now = this.context.currentTime;
+
+    for (let i = 0; i < 4; i++) {
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(80 + (i % 2) * 20, now + i * 0.15);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.setValueAtTime(0.05, now + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.1);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now + i * 0.15);
+      osc.stop(now + i * 0.15 + 0.1);
+    }
+  }
+
+  // Fire crackle - random pops
+  _createFireCrackle() {
+    const now = this.context.currentTime;
+
+    for (let i = 0; i < 5; i++) {
+      const delay = Math.random() * 0.3;
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(100 + Math.random() * 200, now + delay);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.setValueAtTime(0.08, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.05);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.05);
+    }
+  }
+
+  // Explosion - bass boom with noise
+  _createExplosionSound() {
+    const now = this.context.currentTime;
+
+    // Bass boom
+    const osc = this.context.createOscillator();
+    const oscGain = this.context.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(100, now);
+    osc.frequency.exponentialRampToValueAtTime(20, now + 0.5);
+
+    oscGain.gain.setValueAtTime(0.4, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+
+    osc.connect(oscGain);
+    oscGain.connect(this.masterGain);
+
+    osc.start(now);
+    osc.stop(now + 0.5);
+
+    // Noise burst
+    const bufferSize = this.context.sampleRate * 0.3;
+    const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = this.context.createBufferSource();
+    noise.buffer = buffer;
+
+    const noiseGain = this.context.createGain();
+    noiseGain.gain.setValueAtTime(0.3, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+
+    noise.connect(noiseGain);
+    noiseGain.connect(this.masterGain);
+
+    noise.start(now);
+  }
+
+  // Evacuation alarm - alternating tones
+  _createEvacuationAlarm() {
+    const now = this.context.currentTime;
+
+    for (let i = 0; i < 4; i++) {
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(i % 2 === 0 ? 660 : 880, now + i * 0.25);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.setValueAtTime(0.3, now + i * 0.25);
+      gain.gain.linearRampToValueAtTime(0.01, now + i * 0.25 + 0.2);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now + i * 0.25);
+      osc.stop(now + i * 0.25 + 0.2);
+    }
+  }
+
+  // Cash register - coin sound
+  _createCashRegister() {
+    const now = this.context.currentTime;
+
+    const frequencies = [1800, 2200, 1800];
+    frequencies.forEach((freq, i) => {
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.08);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.setValueAtTime(0.15, now + i * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.08 + 0.1);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.1);
+    });
+  }
+
+  // Contract signed - pen scratch and stamp
+  _createContractSigned() {
+    // Pen scratch
+    const bufferSize = this.context.sampleRate * 0.2;
+    const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
+
+    const noise = this.context.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 2000;
+    filter.Q.value = 5;
+
+    const gain = this.context.createGain();
+    gain.gain.setValueAtTime(0.1, this.context.currentTime);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    noise.start();
+
+    // Stamp thud
+    setTimeout(() => {
+      if (!this.context) return;
+      const osc = this.context.createOscillator();
+      const stampGain = this.context.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, this.context.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(50, this.context.currentTime + 0.1);
+
+      stampGain.gain.setValueAtTime(0.2, this.context.currentTime);
+      stampGain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.1);
+
+      osc.connect(stampGain);
+      stampGain.connect(this.masterGain);
+
+      osc.start();
+      osc.stop(this.context.currentTime + 0.1);
+    }, 200);
+  }
+
+  // Set master volume (0-1)
+  setVolume(value) {
+    if (this.masterGain) {
+      this.masterGain.gain.value = Math.max(0, Math.min(1, value));
+    }
+  }
+
+  // Mute/unmute
+  toggleMute() {
+    if (!this.masterGain) return false;
+    if (this.masterGain.gain.value > 0) {
+      this._previousVolume = this.masterGain.gain.value;
+      this.masterGain.gain.value = 0;
+      return true; // Now muted
+    } else {
+      this.masterGain.gain.value = this._previousVolume || 0.3;
+      return false; // Now unmuted
+    }
   }
 }
