@@ -24,15 +24,16 @@ export function buildDefaultMesh(context) {
 
   const block = new THREE.Mesh(
     new THREE.BoxGeometry(baseWidth, baseHeight, baseDepth),
-    bodyMaterial
+    bodyMaterial || null
   );
   block.position.y = baseHeight / 2;
   group.add(block);
   const body = block;
 
+  const topperMaterial = accentMaterial?.clone() ?? bodyMaterial?.clone() ?? null;
   const topper = new THREE.Mesh(
     new THREE.BoxGeometry(baseWidth * 0.78, baseHeight * 0.32, baseDepth * 0.78),
-    accentMaterial ? accentMaterial.clone() : bodyMaterial.clone()
+    topperMaterial
   );
   topper.position.y = baseHeight + topper.geometry.parameters.height / 2 - 0.4;
   group.add(topper);
