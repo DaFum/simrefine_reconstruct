@@ -1,5 +1,4 @@
-PR Code Suggestions ✨
-Explore these optional code suggestions:
+# file removed
 
 Category	Suggestion                                                                                                                                   	Impact
 Possible issue	
