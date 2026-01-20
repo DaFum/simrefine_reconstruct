@@ -30,7 +30,7 @@ export function buildDefaultMesh(context) {
   group.add(block);
   const body = block;
 
-  const topperMaterial = accentMaterial ? accentMaterial.clone() : (bodyMaterial ? bodyMaterial.clone() : null);
+  const topperMaterial = accentMaterial?.clone() ?? bodyMaterial?.clone() ?? null;
   const topper = new THREE.Mesh(
     new THREE.BoxGeometry(baseWidth * 0.78, baseHeight * 0.32, baseDepth * 0.78),
     topperMaterial
