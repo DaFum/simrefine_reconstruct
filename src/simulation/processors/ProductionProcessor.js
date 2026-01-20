@@ -176,14 +176,15 @@ export function processSulfur(context) {
     ? perDayToPerHour(sulfur.capacity) * clamp(sulfurState.throttle, 0, 1.2)
     : 0;
 
-  const totalAvailable = residPool + heavyPool;
-  const residRatio = totalAvailable > 0 ? residPool / totalAvailable : 0.5;
+  const totalFeedAvailable = residPool + heavyPool;
+  const sulfurFeed = Math.min(totalFeedAvailable, sulfurCapacity);
 
-  const sulfurFeed = Math.min(totalAvailable, sulfurCapacity);
-  const residConsumed = Math.min(residPool, sulfurFeed * residRatio);
-  const heavyConsumed = Math.min(heavyPool, sulfurFeed * (1 - residRatio));
+  const residUsed = totalFeedAvailable > 0 ? (residPool / totalFeedAvailable) * sulfurFeed : 0;
+  const heavyUsed = totalFeedAvailable > 0 ? (heavyPool / totalFeedAvailable) * sulfurFeed : 0;
 
-  const sulfurRemoved = sulfurFeed * (0.55 + environmentParam * 0.4);
+  // Calculate sulfurRemoved based on actual consumed amounts to maintain mass balance
+  const actualFeedConsumed = residUsed + heavyUsed;
+  const sulfurRemoved = actualFeedConsumed * (0.55 + environmentParam * 0.4);
 
   if (sulfur) {
     sulfur.throughput = perHourToPerDay(sulfurFeed);
@@ -192,8 +193,8 @@ export function processSulfur(context) {
   }
 
   return {
-    residPool: residPool - residConsumed,
-    heavyPool: heavyPool - heavyConsumed,
+    residPool: residPool - residUsed,
+    heavyPool: heavyPool - heavyUsed,
     sulfur: sulfurRemoved,
     waste: Math.max(0, sulfurFeed - sulfurRemoved),
   };

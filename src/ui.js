@@ -547,26 +547,10 @@ export class UIController {
     }
 
     if (this.elements.throughputOutput) {
-        // Calculate utilization based on known base capacity
-        // Note: Simulation doesn't expose total capacity directly in metrics, so we approximate
-        // based on crude intake vs capacity or just sum of unit utilization?
-        // Let's use crude intake vs base capacity (120) for now or use the passed throttle.
-        const throttle = metrics.storageThrottle ?? 1;
-        const target = this.simulation.params.crudeIntake;
-        // Or better, sum of unit utilization / unit count?
-        // Actually, let's just use the crude intake param vs max as a proxy,
-        // OR better yet, ask simulation for it.
-        // Simulation metrics has `crudeThroughput` implicitly via production.
-        // Let's use the crude intake setting for now as "Utilization" of nameplate.
-        // Wait, `metrics.operationalStrain` is based on throughput.
-
-        // Let's calculate utilization from production vs crudeIntake
-        // Total products / crudeIntake?
-
-        // Actually, let's look at `metrics.storageUtilization` which exists.
-        // But for throughput, let's show crude intake relative to base 120kbpd
-        const intake = this.simulation.params.crudeIntake;
-        const util = Math.round((intake / 180) * 100); // 180 is max capacity of CDU
+        // Calculate utilization based on actual throughput vs CDU capacity from metrics
+        const throughput = metrics.crudeThroughput || 0;
+        const cduCapacity = metrics.cduCapacity || 180; // Fallback to 180
+        const util = cduCapacity > 0 ? Math.round((throughput / cduCapacity) * 100) : 0;
         this.elements.throughputOutput.textContent = `${util}%`;
     }
 

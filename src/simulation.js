@@ -13,10 +13,8 @@ import {
 
 const PRODUCT_LABELS = { gasoline: "gasoline", diesel: "diesel", jet: "jet fuel" };
 const HOURS_PER_DAY = 24;
-const SHIPMENT_PARCEL_SIZES = { gasoline: 44, diesel: 36, jet: 30 };
 const SHIPMENT_HORIZON_HOURS = 48;
 const BASE_CRUDE_THROUGHPUT = 120;
-const randomRange = (min, max) => min + Math.random() * (max - min);
 
 export class RefinerySimulation {
   constructor(eventBus = null) {
@@ -69,6 +67,8 @@ export class RefinerySimulation {
       reliability: 1,
       carbon: 0,
       waste: 0,
+      crudeThroughput: 0,
+      cduCapacity: 0,
       flareLevel: 0,
       operationalStrain: 0,
       incidents: 0,
@@ -394,6 +394,8 @@ export class RefinerySimulation {
       reliability: 1,
       carbon: 0,
       waste: 0,
+      crudeThroughput: 0,
+      cduCapacity: 0,
       flareLevel: 0,
       operationalStrain: 0,
       incidents: 0,
@@ -525,6 +527,11 @@ export class RefinerySimulation {
         : 0;
     const crudeThroughput = Math.min(crudeAvailable, distCapacity);
     const crudeThroughputPerDay = perHourToPerDay(crudeThroughput);
+
+    // Store actual throughput and CDU capacity in metrics for utilization calculation
+    this.metrics.crudeThroughput = crudeThroughputPerDay;
+    this.metrics.cduCapacity = distillation ? distillation.capacity : 180;
+
     if (distillation) {
       distillation.throughput = crudeThroughputPerDay;
       distillation.utilization = distillation.capacity
@@ -854,7 +861,7 @@ export class RefinerySimulation {
     this.metrics.basisGasoline = economy.basis.gasoline;
     this.metrics.basisDiesel = economy.basis.diesel;
     this.metrics.basisJet = economy.basis.jet;
-    this.metrics.waste = result.waste;
+    this.metrics.waste = this._round(perHourToPerDay(result.waste));
     this.metrics.flareLevel = clamp((result.waste + flare * 1.4) / (crudeThroughput * 0.5 || 1), 0, 1);
     this.metrics.incidents = incidentsRisk.incidents;
     this.metrics.reliability = incidentsRisk.reliability;
