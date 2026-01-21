@@ -17,8 +17,9 @@
     />
   </head>
   <body>
+    <a href="#desktop" class="skip-link">Skip to content</a>
     <div id="desktop">
-      <nav id="menu-bar" class="menu-bar" role="menubar">
+      <nav id="menu-bar" class="menu-bar" role="menubar" aria-label="Main Navigation">
         <div class="menu" data-menu="session">
           <button type="button" class="menu-item" role="menuitem" aria-haspopup="true" aria-expanded="false">
             Session
@@ -64,7 +65,7 @@
           </button>
           <div class="menu-dropdown" role="menu" id="unit-menu"></div>
         </div>
-        <button type="button" class="menu-item menu-action" role="menuitem" id="menu-toggle">
+        <button type="button" class="menu-item menu-action" role="menuitem" id="menu-toggle" aria-label="Pause Simulation">
           Pause
         </button>
         <div class="menu-spacer" aria-hidden="true"></div>
@@ -187,8 +188,8 @@
           </header>
           <div class="window-body">
             <div class="edit-grid">
-              <section id="hud" class="panel operations" aria-live="polite">
-                <h2>Operations Console</h2>
+              <section id="hud" class="panel operations" aria-live="polite" aria-labelledby="hud-title">
+                <h2 id="hud-title">Operations Console</h2>
                 <div class="control-group">
                   <label for="crude-input">Crude Intake <span id="crude-value"></span></label>
                   <input type="range" id="crude-input" min="40" max="220" value="120" />
