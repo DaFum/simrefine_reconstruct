@@ -378,7 +378,7 @@ body {
 /* Process & logistics legend */
 #process-legend {
   position: absolute;
-  right: 16px;
+  left: 16px;
   bottom: 16px;
   max-width: 320px;
   padding: 8px 10px;
