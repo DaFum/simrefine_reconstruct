@@ -1647,10 +1647,8 @@ export class TileRenderer {
     return ship;
   }
 
-  _createShip(shipment, id) {
-    const group = new THREE.Group();
-    const baseColorHex = SHIP_COLORS[shipment.product] || DEFAULT_SHIP_COLOR;
-    const baseColor = new THREE.Color(baseColorHex);
+  _getShipGeometries() {
+    if (this.shipGeometries) return this.shipGeometries;
 
     const hullLength = this.tileScale * 1.85;
     const hullWidth = this.tileScale * 0.56;
@@ -1675,15 +1673,54 @@ export class TileRenderer {
     hullGeometry.translate(0, hullHeight / 2, 0);
     hullGeometry.computeVertexNormals();
 
+    const waterlineGeometry = new THREE.BoxGeometry(hullLength * 0.96, hullHeight * 0.22, hullWidth * 0.88);
+    const deckGeometry = new THREE.PlaneGeometry(hullLength * 0.9, hullWidth * 0.6, 1, 1);
+
+    const bridgeHeight = hullHeight * 0.58;
+    const bridgeGeometry = new THREE.BoxGeometry(hullLength * 0.32, bridgeHeight, hullWidth * 0.58);
+
+    const stackGeometry = new THREE.CylinderGeometry(hullWidth * 0.12, hullWidth * 0.18, hullHeight * 0.64, 14);
+    const mastGeometry = new THREE.CylinderGeometry(0.12, 0.14, hullHeight * 1.1, 12);
+    const radarGeometry = new THREE.BoxGeometry(hullLength * 0.22, hullHeight * 0.08, hullWidth * 0.12);
+    const railGeometry = new THREE.BoxGeometry(hullLength * 0.86, 0.06, 0.04);
+    const cargoBoxGeometry = new THREE.BoxGeometry(hullLength * 0.2, hullHeight * 0.22, hullWidth * 0.48);
+    const wakeGeometry = new THREE.PlaneGeometry(hullWidth * 1.1, hullLength * 0.9);
+
+    this.shipGeometries = {
+        hull: hullGeometry,
+        waterline: waterlineGeometry,
+        deck: deckGeometry,
+        bridge: bridgeGeometry,
+        stack: stackGeometry,
+        mast: mastGeometry,
+        radar: radarGeometry,
+        rail: railGeometry,
+        cargoBox: cargoBoxGeometry,
+        wake: wakeGeometry
+    };
+
+    return this.shipGeometries;
+  }
+
+  _createShip(shipment, id) {
+    const geos = this._getShipGeometries();
+    const group = new THREE.Group();
+    const baseColorHex = SHIP_COLORS[shipment.product] || DEFAULT_SHIP_COLOR;
+    const baseColor = new THREE.Color(baseColorHex);
+
+    const hullLength = this.tileScale * 1.85;
+    const hullWidth = this.tileScale * 0.56;
+    const hullHeight = this.tileScale * 0.4;
+    const bridgeHeight = hullHeight * 0.58;
+
     const hullMaterial = new THREE.MeshStandardMaterial({
       color: baseColor.clone().multiplyScalar(0.82),
       metalness: 0.22,
       roughness: 0.4,
     });
-    const hull = new THREE.Mesh(hullGeometry, hullMaterial);
+    const hull = new THREE.Mesh(geos.hull, hullMaterial);
     group.add(hull);
 
-    const waterlineGeometry = new THREE.BoxGeometry(hullLength * 0.96, hullHeight * 0.22, hullWidth * 0.88);
     const waterlineMaterial = new THREE.MeshStandardMaterial({
       color: baseColor.clone().multiplyScalar(0.35),
       metalness: 0.3,
@@ -1691,51 +1728,45 @@ export class TileRenderer {
       transparent: true,
       opacity: 0.95,
     });
-    const waterline = new THREE.Mesh(waterlineGeometry, waterlineMaterial);
+    const waterline = new THREE.Mesh(geos.waterline, waterlineMaterial);
     waterline.position.y = hullHeight * 0.22;
     group.add(waterline);
 
-    const deckGeometry = new THREE.PlaneGeometry(hullLength * 0.9, hullWidth * 0.6, 1, 1);
     const deckMaterial = new THREE.MeshStandardMaterial({
       color: baseColor.clone().lerp(new THREE.Color(0xf7f9fc), 0.48),
       metalness: 0.1,
       roughness: 0.35,
     });
-    const deck = new THREE.Mesh(deckGeometry, deckMaterial);
+    const deck = new THREE.Mesh(geos.deck, deckMaterial);
     deck.rotation.x = -Math.PI / 2;
     deck.position.y = hullHeight * 0.9;
     group.add(deck);
 
-    const bridgeHeight = hullHeight * 0.58;
-    const bridgeGeometry = new THREE.BoxGeometry(hullLength * 0.32, bridgeHeight, hullWidth * 0.58);
     const bridgeMaterial = new THREE.MeshStandardMaterial({
       color: 0xf0f4f8,
       metalness: 0.05,
       roughness: 0.32,
     });
-    const bridge = new THREE.Mesh(bridgeGeometry, bridgeMaterial);
+    const bridge = new THREE.Mesh(geos.bridge, bridgeMaterial);
     bridge.position.set(-hullLength * 0.18, hullHeight + bridgeHeight / 2, 0);
     group.add(bridge);
 
-    const stackGeometry = new THREE.CylinderGeometry(hullWidth * 0.12, hullWidth * 0.18, hullHeight * 0.64, 14);
     const stackMaterial = new THREE.MeshStandardMaterial({
       color: baseColor.clone().lerp(new THREE.Color(0x2d3442), 0.55),
       metalness: 0.3,
       roughness: 0.44,
     });
-    const stack = new THREE.Mesh(stackGeometry, stackMaterial);
+    const stack = new THREE.Mesh(geos.stack, stackMaterial);
     stack.position.set(-hullLength * 0.05, hullHeight + hullHeight * 0.55, 0);
     group.add(stack);
 
-    const mastGeometry = new THREE.CylinderGeometry(0.12, 0.14, hullHeight * 1.1, 12);
     const mastMaterial = new THREE.MeshStandardMaterial({ color: 0xfdfdfd, metalness: 0.18, roughness: 0.28 });
-    const mast = new THREE.Mesh(mastGeometry, mastMaterial);
+    const mast = new THREE.Mesh(geos.mast, mastMaterial);
     mast.position.set(hullLength * 0.3, hullHeight + hullHeight * 0.75, 0);
     group.add(mast);
 
-    const radarGeometry = new THREE.BoxGeometry(hullLength * 0.22, hullHeight * 0.08, hullWidth * 0.12);
     const radarMaterial = new THREE.MeshStandardMaterial({ color: 0xf5faff, metalness: 0.12, roughness: 0.28 });
-    const radar = new THREE.Mesh(radarGeometry, radarMaterial);
+    const radar = new THREE.Mesh(geos.radar, radarMaterial);
     radar.position.set(hullLength * 0.3, mast.position.y + hullHeight * 0.3, 0);
     group.add(radar);
 
@@ -1744,8 +1775,8 @@ export class TileRenderer {
       metalness: 0.4,
       roughness: 0.25,
     });
-    const railGeometry = new THREE.BoxGeometry(hullLength * 0.86, 0.06, 0.04);
-    const portRail = new THREE.Mesh(railGeometry, railMaterial);
+
+    const portRail = new THREE.Mesh(geos.rail, railMaterial);
     portRail.position.set(0, hullHeight + 0.14, hullWidth * 0.34);
     group.add(portRail);
     const starboardRail = portRail.clone();
@@ -1760,7 +1791,7 @@ export class TileRenderer {
     });
     const segments = 3;
     for (let i = 0; i < segments; i += 1) {
-      const box = new THREE.Mesh(new THREE.BoxGeometry(hullLength * 0.2, hullHeight * 0.22, hullWidth * 0.48), cargoMaterial);
+      const box = new THREE.Mesh(geos.cargoBox, cargoMaterial);
       const offset = (i - (segments - 1) / 2) * hullLength * 0.26;
       box.position.set(offset, hullHeight + hullHeight * 0.36, 0);
       cargoGroup.add(box);
@@ -1777,7 +1808,6 @@ export class TileRenderer {
     label.position.set(0, hullHeight + bridgeHeight + 1.4, 0);
     group.add(label);
 
-    const wakeGeometry = new THREE.PlaneGeometry(hullWidth * 1.1, hullLength * 0.9);
     const wakeMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -1785,7 +1815,7 @@ export class TileRenderer {
       depthWrite: false,
       side: THREE.DoubleSide,
     });
-    const wake = new THREE.Mesh(wakeGeometry, wakeMaterial);
+    const wake = new THREE.Mesh(geos.wake, wakeMaterial);
     wake.rotation.x = -Math.PI / 2;
     wake.rotation.z = Math.PI / 2;
     wake.position.set(-hullLength * 0.55, waterline.position.y - hullHeight * 0.18, 0);
@@ -2070,7 +2100,7 @@ export class TileRenderer {
         const newMap = makeLabelTexture(tank.key.toUpperCase(), palette.storageLabels);
         material.map = newMap;
         material.needsUpdate = true;
-        if (oldMap) {
+        if (oldMap && !oldMap.userData?.isCached) {
           oldMap.dispose?.();
         }
       }
@@ -2118,7 +2148,14 @@ function createLabelSprite(text, fill = 0xf0f6ff) {
  * @param {string|number} fillColor - Textfarbe; kann als CSS-Farbstring oder als numerischer Hex-Wert (z. B. 0xff0000) angegeben werden.
  * @returns {THREE.CanvasTexture} Eine CanvasTexture mit dem gerenderten Label. Die Textur wird so konfiguriert, dass sie im sRGB-Farbraum ausgegeben wird.
  */
+const LABEL_CACHE = new Map();
+
 function makeLabelTexture(text, fillColor) {
+  const key = `${text}-${fillColor}`;
+  if (LABEL_CACHE.has(key)) {
+    return LABEL_CACHE.get(key);
+  }
+
   const canvas = document.createElement("canvas");
   canvas.width = 256;
   canvas.height = 72;
@@ -2141,6 +2178,9 @@ function makeLabelTexture(text, fillColor) {
     texture.encoding = THREE.sRGBEncoding;
   }
   texture.needsUpdate = true;
+  texture.userData = texture.userData || {};
+  texture.userData.isCached = true;
+  LABEL_CACHE.set(key, texture);
   return texture;
 }
 
