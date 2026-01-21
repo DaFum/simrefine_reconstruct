@@ -2,24 +2,24 @@
   color-scheme: dark;
 
   /* Layout */
-  --desktop-bg: radial-gradient(circle at 50% 50%, #1a1c23 0%, #050608 100%);
+  --desktop-bg: #0f1013; /* Flat dark bg for less distraction */
   --header-grad-top: #252830;
   --header-grad-bottom: #16181d;
-  --header-text: #ff9e42; /* Amber terminal */
+  --header-text: #fff;
   --toolbar-bg: #111216;
   --toolbar-border: #3e4149;
 
   /* Window */
   --window-bg-light: #1e2128;
-  --window-bg-dark: #121418;
-  --window-border-light: #484c57;
+  --window-bg-dark: #16181d;
+  --window-border-light: #3e4149;
   --window-border-dark: #000000;
   --glass-overlay: rgba(255, 255, 255, 0.03);
 
   /* Metrics & Logs */
   --accent-blue: #00e5ff; /* Cyan */
   --accent-orange: #ff9e42;
-  --metric-bg: #08090b;
+  --metric-bg: #0d0e12;
   --metric-border: #2c313a;
   --log-info: #5ccfe6;
   --log-warning: #ffd33d;
@@ -30,35 +30,35 @@
   --font-sans: "Chakra Petch", sans-serif;
 }
 
-/* Theme: Twilight (Default)
- * Uses :root values for default styling.
- */
-/*
+/* Theme: Twilight (Default) */
 [data-theme="twilight"] {
-  --desktop-bg: radial-gradient(circle at 20% 20%, #1c2a3a 0%, #0a101a 65%);
-  --header-grad-top: #466a9f;
-  --header-grad-bottom: #244165;
+  --desktop-bg: #0f1013;
+  --header-grad-top: #2c3e50;
+  --header-grad-bottom: #1a2530;
+  --accent-blue: #3498db;
 }
-*/
 
 /* Theme: Daybreak */
 [data-theme="daybreak"] {
-  --desktop-bg: radial-gradient(circle at 20% 20%, #3a506b 0%, #1c2a3a 65%);
-  --header-grad-top: #5b84c4;
-  --header-grad-bottom: #365885;
+  --desktop-bg: #e0e6ed;
+  --window-bg-light: #f5f7fa;
+  --window-bg-dark: #ffffff;
+  --window-border-light: #cbd2d9;
+  --header-grad-top: #3b82f6;
+  --header-grad-bottom: #2563eb;
+  --header-text: #fff;
+  --accent-blue: #2563eb;
+  --accent-orange: #d97706;
+  --metric-bg: #f0f4f8;
+  --metric-border: #dce3e8;
+  /* Need to adjust text colors for light mode if fully supported */
 }
 
 /* Theme: Emergency Red */
 [data-theme="emergency"] {
-  --desktop-bg: radial-gradient(circle at 20% 20%, #4a1c1c 0%, #1a0a0a 65%);
+  --desktop-bg: #1a0505;
   --header-grad-top: #9f4646;
   --header-grad-bottom: #652424;
   --window-border-light: #ffb6b6;
-}
-
-/* Theme: Training Mode */
-[data-theme="training"] {
-  --desktop-bg: radial-gradient(circle at 20% 20%, #2a3a1c 0%, #0a1a0a 65%);
-  --header-grad-top: #6a9f46;
-  --header-grad-bottom: #416524;
+  --accent-blue: #ff6b6b;
 }
