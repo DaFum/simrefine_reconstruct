@@ -1406,6 +1406,26 @@ export class RefinerySimulation {
     return { ...this.metrics };
   }
 
+  // Legacy getter for backward compatibility
+  get performanceHistory() {
+    return this.getPerformanceHistory();
+  }
+
+  // Setter to allow clearing/overwriting (e.g. during reset or load)
+  set performanceHistory(val) {
+    // If setting to empty array or null, we just clear our internal buffer state if desired,
+    // but for now we'll just ignore it or handle simple resets if needed.
+    // Ideally we shouldn't be setting this property directly anymore.
+    // However, the code does `this.performanceHistory = []` in places.
+    // If it's an array, we could try to hydrate the buffer, but usually it's just cleared.
+    if (Array.isArray(val) && val.length === 0) {
+        if (this._perfBuffer) {
+            this._perfHead = 0;
+            this._perfCount = 0;
+        }
+    }
+  }
+
   getPerformanceHistory() {
     if (this._perfBuffer) {
         const bufferLen = this._perfBuffer.length;
@@ -1417,7 +1437,8 @@ export class RefinerySimulation {
         }
         return result;
     }
-    return [...this.performanceHistory];
+    // Fallback if buffer not initialized yet (though it should be)
+    return [];
   }
 
   getTime() {
@@ -1487,9 +1508,17 @@ export class RefinerySimulation {
     );
 
     const score = composite * 100;
-    const previous = this.performanceHistory.length
-      ? this.performanceHistory[this.performanceHistory.length - 1]
-      : score;
+    let previous = score;
+
+    // Retrieve previous score from buffer if available
+    if (this._perfBuffer && this._perfCount > 0) {
+      const bufferLen = this._perfBuffer.length;
+      const prevIndex = (this._perfHead - 1 + bufferLen) % bufferLen;
+      previous = this._perfBuffer[prevIndex];
+    } else if (this.performanceHistory && this.performanceHistory.length) {
+      previous = this.performanceHistory[this.performanceHistory.length - 1];
+    }
+
     const delta = score - previous;
 
     this.metrics.score = score;
@@ -1515,26 +1544,20 @@ export class RefinerySimulation {
       this._perfHead = 0;
       this._perfCount = 0;
       // Hydrate from existing history if any (during migration/hot reload)
-      this.performanceHistory.forEach(val => {
-        this._perfBuffer[this._perfHead] = val;
-        this._perfHead = (this._perfHead + 1) % 240;
-        if (this._perfCount < 240) this._perfCount++;
-      });
-      // Keep legacy array; it will be maintained alongside the ring buffer
+      if (this.performanceHistory && this.performanceHistory.length > 0) {
+        this.performanceHistory.forEach(val => {
+          this._perfBuffer[this._perfHead] = val;
+          this._perfHead = (this._perfHead + 1) % 240;
+          if (this._perfCount < 240) this._perfCount++;
+        });
+        // Clear legacy array to free memory, we only need the buffer now
+        this.performanceHistory = [];
+      }
     }
 
     this._perfBuffer[this._perfHead] = score;
     this._perfHead = (this._perfHead + 1) % 240;
     if (this._perfCount < 240) this._perfCount++;
-
-    // Maintain performanceHistory as a synchronized sliding window (for legacy callers)
-    if (!this.performanceHistory) {
-      this.performanceHistory = [];
-    }
-    this.performanceHistory.push(score);
-    if (this.performanceHistory.length > 240) {
-      this.performanceHistory.shift();
-    }
   }
 
   _scoreToGrade(score) {
@@ -2470,6 +2493,9 @@ export class RefinerySimulation {
       lastIncident: unit.lastIncident ? clone(unit.lastIncident) : null,
     }));
 
+    // Ensure performanceHistory array is populated for snapshot
+    const perfHistory = this.getPerformanceHistory();
+
     const snapshot = {
       version: 1,
       timeMinutes: this.timeMinutes,
@@ -2502,7 +2528,7 @@ export class RefinerySimulation {
       storageUpgrades: this.logisticsSystem.storageUpgrades ? { ...this.logisticsSystem.storageUpgrades } : null,
       directives: this.directives.map((directive) => ({ ...directive })),
       directiveStats: { ...this.directiveStats },
-      performanceHistory: this.performanceHistory.map((entry) => ({ ...entry })),
+      performanceHistory: [...perfHistory],
       logs: this.logs.map((entry) => ({ ...entry })),
       market: this.getMarketState(),
       // New system states
@@ -2763,10 +2789,31 @@ export class RefinerySimulation {
     }
 
     if (Array.isArray(snapshot.performanceHistory)) {
-      this.performanceHistory = snapshot.performanceHistory
-        .filter((entry) => entry && typeof entry === "object")
-        .map((entry) => ({ ...entry }))
-        .slice(-120);
+      const history = snapshot.performanceHistory
+        .filter((entry) => typeof entry === "number" || (entry && typeof entry === "object"));
+
+      // Initialize buffer if needed
+      if (!this._perfBuffer) {
+        this._perfBuffer = new Float32Array(240);
+        this._perfHead = 0;
+        this._perfCount = 0;
+      }
+
+      // Populate buffer from snapshot history
+      // Note: snapshot history is ordered old -> new.
+      // We push them into the buffer in order.
+      history.forEach((entry) => {
+        // Handle object wrapper if present (legacy snapshot artifact)
+        const val = (typeof entry === 'object' && entry !== null) ? (Object.values(entry)[0] || 0) : entry;
+        if (typeof val === 'number') {
+           this._perfBuffer[this._perfHead] = val;
+           this._perfHead = (this._perfHead + 1) % 240;
+           if (this._perfCount < 240) this._perfCount++;
+        }
+      });
+
+      // Don't restore this.performanceHistory array, we use buffer now.
+      this.performanceHistory = [];
     } else {
       this.performanceHistory = [];
     }
