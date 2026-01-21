@@ -1153,8 +1153,8 @@ export class TileRenderer {
         pad,
         padMaterial,
         accentMeshes,
-        baseColor: new THREE.Color(def.color),
-        accentColor: new THREE.Color(def.accent),
+        baseColor: _safeColor(def.color),
+        accentColor: _safeColor(def.accent),
       });
     }
   }
@@ -2133,6 +2133,21 @@ function _lerpColor(a, b, t, target) {
     colorB = _lerpColorTempB;
   }
   return result.copy(colorA).lerp(colorB, clamp(t, 0, 1));
+}
+
+function _safeColor(input, defaultVal = 0xffffff) {
+  if (typeof input === "number") return new THREE.Color(input);
+  if (typeof input === "string") {
+    // Restrict strings to safe formats to prevent ReDoS in THREE.Color parsing
+    if (/^#(?:[0-9a-fA-F]{3}){1,2}$/.test(input) || /^0x[0-9a-fA-F]+$/.test(input)) {
+      return new THREE.Color(input);
+    }
+    // Allow simple alphanumeric color names
+    if (/^[a-z]+$/i.test(input) && input.length < 24) {
+      return new THREE.Color(input);
+    }
+  }
+  return new THREE.Color(defaultVal);
 }
 
 function createLabelSprite(text, fill = 0xf0f6ff) {
