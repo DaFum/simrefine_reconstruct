@@ -35,7 +35,6 @@ const speedControls = document.getElementById("speed-controls");
 const gridToggleButton = menuBar?.querySelector('[data-action="view-toggle-grid"]');
 const flowToggleButton = menuBar?.querySelector('[data-action="view-toggle-flow"]');
 const calloutShelf = document.getElementById("alert-callouts");
-const mapStatusPanel = document.querySelector(".map-status");
 
 sceneContainer.innerHTML = "";
 
@@ -1343,10 +1342,11 @@ function updateMenuToggle(running) {
 }
 
 function buildProcessLegend() {
-  if (!mapStatusPanel || !processTopology) {
+  const mapArea = mapViewport?.parentElement;
+  if (!mapArea || !processTopology) {
     return;
   }
-  if (mapStatusPanel.querySelector("#process-legend")) {
+  if (mapArea.querySelector("#process-legend")) {
     return;
   }
   const legend = document.createElement("div");
@@ -1456,7 +1456,7 @@ function buildProcessLegend() {
     list.appendChild(item);
   });
   legend.appendChild(list);
-  mapStatusPanel.appendChild(legend);
+  mapArea.appendChild(legend);
 }
 
 function highlightPipelinesForUnit(unitId) {
