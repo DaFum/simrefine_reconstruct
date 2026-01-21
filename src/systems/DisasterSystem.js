@@ -152,11 +152,11 @@ export class DisasterSystem {
    * Check for overpressure conditions
    */
   checkOverpressure(unitId, conditions) {
-    const { flowBlocked, pumpRunning, valveClosed, pressure } = conditions;
+    const { flowBlocked, pumpRunning } = conditions;
 
     if (flowBlocked && pumpRunning) {
       // Potential overpressure building
-      let pressurePoint = this.pressurePoints.get(unitId) || { pressure: 100, maxPressure: 150 };
+      const pressurePoint = this.pressurePoints.get(unitId) || { pressure: 100, maxPressure: 150 };
       pressurePoint.pressure += 5; // PSI per check
 
       if (pressurePoint.pressure > pressurePoint.maxPressure) {
@@ -344,7 +344,7 @@ export class DisasterSystem {
   /**
    * Main update loop
    */
-  update(deltaMinutes, context) {
+  update(deltaMinutes, _context) {
     const hours = deltaMinutes / 60;
 
     // Update active disasters
@@ -533,7 +533,7 @@ export class DisasterSystem {
     this.contamination.waterContamination = Math.max(0, this.contamination.waterContamination - 0.001 * deltaMinutes);
   }
 
-  _updateEvacuation(deltaMinutes) {
+  _updateEvacuation(_deltaMinutes) {
     if (!this.evacuation.active) return;
 
     // Check if all disasters resolved

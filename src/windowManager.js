@@ -108,13 +108,13 @@ export class WindowManager {
           if (config.visible.includes(winClass)) {
               win.style.display = 'flex';
               // Apply layout if defined
-              if (config.layout && config.layout[winClass]) {
+              if (config.layout?.[winClass]) {
                   const layout = config.layout[winClass];
                   win.style.position = 'absolute';
-                  win.style.left = layout.x + 'px';
-                  win.style.top = layout.y + 'px';
-                  win.style.width = layout.w + 'px';
-                  win.style.height = layout.h + 'px';
+                  win.style.left = `${layout.x}px`;
+                  win.style.top = `${layout.y}px`;
+                  win.style.width = `${layout.w}px`;
+                  win.style.height = `${layout.h}px`;
 
                   // Reset drag offsets when switching workspace
                   win.style.transform = 'translate(0px, 0px)';

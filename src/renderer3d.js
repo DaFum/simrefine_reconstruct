@@ -1,6 +1,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { buildUnitMesh } from "./renderer/meshBuilders/index.js";
 import { clamp } from "./simulation/utils/calculations.js";
+
 const lerp = (start, end, t) => start + (end - start) * t;
 const damp = (current, target, lambda, dt) => lerp(current, target, 1 - Math.exp(-lambda * dt));
 
@@ -532,14 +533,14 @@ export class TileRenderer {
 
     // Find pipelines connected to this unit
     const pipelines = this.pipelineDefs.filter(def => {
-       const isStart = def.path && def.path[0] && def.path[0].unit === unitId;
-       const isEnd = def.path && def.path[def.path.length-1] && def.path[def.path.length-1].unit === unitId;
+       const isStart = def.path?.[0] && def.path[0].unit === unitId;
+       const isEnd = def.path?.[def.path.length-1] && def.path[def.path.length-1].unit === unitId;
        return isStart || isEnd;
     });
 
     pipelines.forEach(def => {
        const mesh = this.pipelineMeshes.get(def.id);
-       if (mesh && mesh.mesh.geometry) {
+       if (mesh?.mesh.geometry) {
           // Use curve points if available, or approximate path
           // The TubeGeometry has a path
           const curve = mesh.mesh.geometry.parameters.path;
@@ -573,7 +574,7 @@ export class TileRenderer {
       this.activeScaffolds = new Map();
   }
 
-  _updateActionToys(dt) {
+  _updateActionToys(_dt) {
       if (!this.simulation || typeof this.simulation.getActionToysState !== "function") return;
       const state = this.simulation.getActionToysState();
 
@@ -602,7 +603,7 @@ export class TileRenderer {
               if (truckCount >= 50) break;
 
               const offset = i * 0.2;
-              let t = progress - offset * 0.05;
+              const t = progress - offset * 0.05;
               if (t < 0 || t > 1) continue;
 
               if (t < 0.5) {
@@ -695,7 +696,7 @@ export class TileRenderer {
               scaffold.traverse(child => {
                   if (child.geometry) child.geometry.dispose();
                   if (child.material) {
-                      if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                      if (Array.isArray(child.material)) child.material.forEach(m => { m.dispose(); });
                       else child.material.dispose();
                   }
               });
@@ -1223,7 +1224,7 @@ export class TileRenderer {
     }
   }
 
-  _resolvePipelinePoint(entry, index, def) {
+  _resolvePipelinePoint(entry, _index, _def) {
     if (!entry) {
       return null;
     }
@@ -1393,7 +1394,7 @@ export class TileRenderer {
   }
 
   _createStorage() {
-    const spanX = this.mapBounds.maxX - this.mapBounds.minX;
+    const _spanX = this.mapBounds.maxX - this.mapBounds.minX;
     const baseX = this.mapBounds.maxX + 1.8;
     const baseY = lerp(this.mapBounds.minY, this.mapBounds.maxY, 0.5);
     const palette = this._getPalette();
@@ -2119,7 +2120,7 @@ export class TileRenderer {
   }
 }
 
-function lerpColor(a, b, t, target) {
+function _lerpColor(a, b, t, target) {
   const result = target || new THREE.Color();
   let colorA = a;
   if (!(a instanceof THREE.Color)) {
@@ -2240,5 +2241,5 @@ function createGlowTexture() {
  */
 function easeInOut(t) {
   const clamped = clamp(t, 0, 1);
-  return clamped < 0.5 ? 2 * clamped * clamped : 1 - Math.pow(-2 * clamped + 2, 2) / 2;
+  return clamped < 0.5 ? 2 * clamped * clamped : 1 - (-2 * clamped + 2) ** 2 / 2;
 }

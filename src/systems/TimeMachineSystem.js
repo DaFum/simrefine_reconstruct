@@ -533,7 +533,7 @@ export class TimeMachineSystem {
 
       return { success: true, sessionId: session.id };
     } catch (e) {
-      return { success: false, error: 'Failed to parse session: ' + e.message };
+      return { success: false, error: `Failed to parse session: ${e.message}` };
     }
   }
 

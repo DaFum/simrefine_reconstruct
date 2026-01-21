@@ -4,8 +4,6 @@
  * Component wear tracking, turnarounds, and reliability optimization.
  */
 
-import { clamp } from "../simulation/utils/calculations.js";
-
 export const MAINTENANCE_STRATEGIES = {
   reactive: {
     id: 'reactive',
@@ -342,7 +340,7 @@ export class MaintenanceSystem {
     };
   }
 
-  _updateComponentWear(hours, context) {
+  _updateComponentWear(hours, _context) {
     Object.entries(this.components).forEach(([unitId, components]) => {
       const strategy = MAINTENANCE_STRATEGIES[this.unitStrategies[unitId]] ||
                        MAINTENANCE_STRATEGIES.preventative;
@@ -385,7 +383,7 @@ export class MaintenanceSystem {
     });
   }
 
-  _triggerComponentFailure(unitId, componentId, component, componentType) {
+  _triggerComponentFailure(unitId, componentId, _component, componentType) {
     const unit = this.simulation?.unitMap?.[unitId];
     if (!unit) return;
 
@@ -447,7 +445,7 @@ export class MaintenanceSystem {
     });
   }
 
-  _processActiveTurnarounds(deltaMinutes) {
+  _processActiveTurnarounds(_deltaMinutes) {
     const currentTime = this.simulation?.timeMinutes || 0;
 
     this.activeTurnarounds = this.activeTurnarounds.filter(ta => {
@@ -496,7 +494,7 @@ export class MaintenanceSystem {
     });
   }
 
-  _processWorkOrders(deltaMinutes) {
+  _processWorkOrders(_deltaMinutes) {
     const currentTime = this.simulation?.timeMinutes || 0;
 
     this.workOrders.forEach(wo => {
@@ -601,7 +599,7 @@ export class MaintenanceSystem {
   getMaintenanceCostRate() {
     let totalCost = 0;
 
-    Object.entries(this.unitStrategies).forEach(([unitId, strategyId]) => {
+    Object.entries(this.unitStrategies).forEach(([_unitId, strategyId]) => {
       const strategy = MAINTENANCE_STRATEGIES[strategyId];
       const baseCost = 5000; // Base monthly cost per unit
       totalCost += baseCost * strategy.costMultiplier / 720; // Per hour

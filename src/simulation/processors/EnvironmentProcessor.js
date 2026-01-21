@@ -64,7 +64,7 @@ export function calculateEnvironmentMetrics(context) {
 /**
  * Check if environment warning should be logged
  */
-export function shouldLogEnvironmentWarning(environmentPenalty, envExcess, cooldown) {
+export function shouldLogEnvironmentWarning(environmentPenalty, _envExcess, cooldown) {
   return environmentPenalty > 4 && cooldown <= 0;
 }
 

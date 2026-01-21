@@ -1,12 +1,6 @@
 /* interact.js 1.10.27 | https://raw.github.com/taye/interact.js/main/LICENSE */
 
-!function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"function"==typeof define&&define.amd?define(e):(t="undefined"!=typeof globalThis?globalThis:t||self).interact=e()}(this,(function(){"use strict";/**
- * Gibt die eigenen Eigenschaftsnamen und -symbole eines Objekts zurück, optional nur die aufzählbaren.
- * 
- * @param {Object} obj - Das Quellobjekt, dessen eigenen Eigenschafts-Schlüssel ermittelt werden sollen.
- * @param {boolean} [enumerableOnly] - Wenn `true`, werden nur aufzählbare Symbol-Eigenschaften eingeschlossen.
- * @returns {(string|symbol)[]} Ein Array mit den Eigenschaftsnamen (Strings) und -symbolen des Objekts.
- */
+!function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"function"==typeof define&&define.amd?define(e):(t="undefined"!=typeof globalThis?globalThis:t||self).interact=e()}(this,(function(){
 function t(t,e){var n=Object.keys(t);if(Object.getOwnPropertySymbols){var r=Object.getOwnPropertySymbols(t);e&&(r=r.filter((function(e){return Object.getOwnPropertyDescriptor(t,e).enumerable}))),n.push.apply(n,r)}return n}/**
  * Kopiert Eigenschaften aus einem oder mehreren Quellobjekten in ein Zielobjekt und gibt dieses zurück.
  *
@@ -92,7 +86,7 @@ function p(t){var e=function(){if("undefined"==typeof Reflect||!Reflect.construc
  * @param {Object} [n] - Optionaler Receiver, der als `this` für Getter verwendet wird.
  * @returns {*} Der gelesene Eigenschaftswert oder `undefined`, falls die Eigenschaft nicht existiert.
  */
-function f(){return f="undefined"!=typeof Reflect&&Reflect.get?Reflect.get.bind():function(t,e,n){var r=function(t,e){for(;!Object.prototype.hasOwnProperty.call(t,e)&&null!==(t=c(t)););return t}(t,e);if(r){var i=Object.getOwnPropertyDescriptor(r,e);return i.get?i.get.call(arguments.length<3?t:n):i.value}},f.apply(this,arguments)}/**
+function f(){return f="undefined"!=typeof Reflect&&Reflect.get?Reflect.get.bind():function(t,e,n){var r=function(t,e){for(;!Object.hasOwn(t,e)&&null!==(t=c(t)););return t}(t,e);if(r){var i=Object.getOwnPropertyDescriptor(r,e);return i.get?i.get.call(arguments.length<3?t:n):i.value}},f.apply(this,arguments)}/**
  * Konvertiert einen Wert zu einem primitiven String oder Symbol.
  * @param {*} t - Der zu konvertierende Wert.
  * @returns {string|symbol} Ein `Symbol`, falls die interne ToPrimitive-Umwandlung ein Symbol liefert, sonst die String-Repräsentation des Werts.
@@ -773,7 +767,7 @@ function a(t,e,r,i){if(t.addEventListener){var a=Ge(i),s=bt(n,(function(e){retur
  * @param {Function|string} r - Die Listener-Funktion, die entfernt werden soll, oder `"all"` für alle Listener des Typs.
  * @param {Object|boolean} [i] - Die Listener-Optionen (oder `capture`-Boolean) zum Abgleich beim Entfernen.
  */
-function s(t,e,r,i){if(t.addEventListener&&t.removeEventListener){var a=yt(n,(function(e){return e.eventTarget===t})),c=n[a];if(c&&c.events)if("all"!==e){var l=!1,u=c.events[e];if(u){if("all"===r){for(var p=u.length-1;p>=0;p--){var f=u[p];s(t,e,f.func,f.options)}return}for(var d=Ge(i),h=0;h<u.length;h++){var v=u[h];if(v.func===r&&Ne(v.options,d)){t.removeEventListener(e,r,o.supportsOptions?d:d.capture),u.splice(h,1),0===u.length&&(delete c.events[e],l=!0);break}}}l&&!Object.keys(c.events).length&&n.splice(a,1)}else for(e in c.events)c.events.hasOwnProperty(e)&&s(t,e,"all")}}/**
+function s(t,e,r,i){if(t.addEventListener&&t.removeEventListener){var a=yt(n,(function(e){return e.eventTarget===t})),c=n[a];if(c&&c.events)if("all"!==e){var l=!1,u=c.events[e];if(u){if("all"===r){for(var p=u.length-1;p>=0;p--){var f=u[p];s(t,e,f.func,f.options)}return}for(var d=Ge(i),h=0;h<u.length;h++){var v=u[h];if(v.func===r&&Ne(v.options,d)){t.removeEventListener(e,r,o.supportsOptions?d:d.capture),u.splice(h,1),0===u.length&&(delete c.events[e],l=!0);break}}}l&&!Object.keys(c.events).length&&n.splice(a,1)}else for(e in c.events)Object.hasOwn(c.events, e)&&s(t,e,"all")}}/**
  * Ruft für ein Interaktionsereignis alle passenden delegierten Listener auf und setzt dabei `currentTarget` auf das jeweilige Element.
  *
  * Führt die Callback-Funktionen der registrierten Listener aus, deren Selektor mit einem Vorfahren des Ereignisziels übereinstimmt, deren Kontext sowohl das ursprüngliche Ziel als auch das aktuelle Element erlaubt und deren Listener-Optionen mit dem übergebenen Event übereinstimmen.

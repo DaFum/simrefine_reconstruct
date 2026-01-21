@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudioController } from '../../src/audio.js';
 
 describe('AudioController', () => {
@@ -15,7 +15,7 @@ describe('AudioController', () => {
     instances.forEach(instance => {
       try {
         instance.destroy();
-      } catch (e) {
+      } catch (_e) {
         // Ignore destroy errors in tests
       }
     });
@@ -109,7 +109,7 @@ describe('AudioController', () => {
     });
 
     it('should store sound generator functions', () => {
-      audio.sounds.forEach((generator, key) => {
+      audio.sounds.forEach((generator, _key) => {
         expect(typeof generator).toBe('function');
       });
     });

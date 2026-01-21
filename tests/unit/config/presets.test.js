@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { OPERATION_PRESETS, SESSION_PRESETS } from '../../../src/config/presets.js';
 
 describe('OPERATION_PRESETS', () => {

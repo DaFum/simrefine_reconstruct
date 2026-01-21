@@ -4,8 +4,6 @@
  * marine terminal operations, and demurrage penalties.
  */
 
-import { clamp } from "../simulation/utils/calculations.js";
-
 export const CRUDE_TYPES = {
   WTI: {
     id: 'wti',
@@ -354,7 +352,7 @@ export class SupplyChainSystem {
     this._addToTank(crudeType, volumeDelivered);
   }
 
-  _updateContracts(hours) {
+  _updateContracts(_hours) {
     const currentTime = this.simulation?.timeMinutes || 0;
 
     this.activeContracts = this.activeContracts.filter(contract => {
@@ -488,7 +486,7 @@ export class SupplyChainSystem {
   _calculateDemurrageCost(hours) {
     return this.marineDock.queue
       .filter(s => s.status === 'waiting')
-      .reduce((sum, s) => sum + (this.marineDock.demurrageRate / 24) * hours, 0);
+      .reduce((sum, _s) => sum + (this.marineDock.demurrageRate / 24) * hours, 0);
   }
 
   /**

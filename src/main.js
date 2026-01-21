@@ -1,14 +1,14 @@
-import { RefinerySimulation } from "./simulation.js";
-import { UIController } from "./ui.js";
-import { TileRenderer } from "./renderer3d.js";
 import { AudioController } from "./audio.js";
-import { EventBus } from "./eventBus.js";
 import { CommandSystem } from "./commandSystem.js";
-import { ThemeManager } from "./themeManager.js";
-import { WindowManager } from "./windowManager.js";
-import { UNIT_CONFIGS, PIPELINE_CONFIGS, OPERATION_PRESETS, SESSION_PRESETS } from "./config/index.js";
-import { TickerComponent } from "./ui/index.js";
+import { OPERATION_PRESETS, PIPELINE_CONFIGS, SESSION_PRESETS, UNIT_CONFIGS } from "./config/index.js";
+import { EventBus } from "./eventBus.js";
+import { TileRenderer } from "./renderer3d.js";
 import { clamp } from "./simulation/utils/calculations.js";
+import { RefinerySimulation } from "./simulation.js";
+import { ThemeManager } from "./themeManager.js";
+import { TickerComponent } from "./ui/index.js";
+import { UIController } from "./ui.js";
+import { WindowManager } from "./windowManager.js";
 
 const mapViewport = document.getElementById("map-viewport");
 let sceneContainer = document.getElementById("scene-container");
@@ -72,7 +72,7 @@ window.simRefinery = { simulation, renderer, ui, windowManager, commandSystem, t
 const unitPulseEntries = new Map();
 const unitModeLabels = new Map();
 let selectedUnitId = null;
-let activePreset = "auto";
+let _activePreset = "auto";
 let lastPulseRefresh = 0;
 let gridVisible = true;
 let flowOverlayVisible = true;
@@ -158,7 +158,7 @@ const sliderInputs = document.querySelectorAll('#hud input[type="range"]');
 sliderInputs.forEach((input) => {
   input.addEventListener("input", () => {
     updatePresetButtons(null);
-    activePreset = null;
+      _activePreset = null;
     if (typeof ui.setModeBadge === "function") {
       ui.setModeBadge("CUSTOM");
     }
@@ -430,7 +430,7 @@ function applyPreset(name, options = {}) {
 
   ui.refreshControls();
   updatePresetButtons(name);
-  activePreset = name;
+  _activePreset = name;
   if (typeof ui.setModeBadge === "function") {
     ui.setModeBadge(preset.label);
   }
@@ -663,7 +663,7 @@ function setFlowVisibility(visible) {
 function performSimulationReset() {
   simulation.reset();
   applyPreset("auto", { silent: true });
-  activePreset = "auto";
+  _activePreset = "auto";
   updatePresetButtons("auto");
   updateScenarioButtons(simulation.activeScenarioKey);
   ui.refreshControls();
@@ -789,7 +789,7 @@ function loadSessionPreset(key) {
   simulation.performanceHistory = [];
   simulation.update(1);
 
-  activePreset = null;
+  _activePreset = null;
   updatePresetButtons(null);
   ui.refreshControls();
   ui.setScenario(simulation.activeScenarioKey);
@@ -835,7 +835,7 @@ function handleSnapshotImport(event) {
     try {
       const snapshot = JSON.parse(reader.result);
       simulation.loadSnapshot(snapshot);
-      activePreset = null;
+      _activePreset = null;
       updatePresetButtons(null);
       ui.refreshControls();
       ui.setScenario(simulation.activeScenarioKey);
@@ -1592,12 +1592,12 @@ function buildUnitConnectionIndex(topology) {
   Object.entries(topology).forEach(([unitId, entry]) => {
     const pipelines = new Set();
     (entry.feeds || []).forEach((item) => {
-      if (item && item.pipeline) {
+      if (item?.pipeline) {
         pipelines.add(item.pipeline);
       }
     });
     (entry.outputs || []).forEach((item) => {
-      if (item && item.pipeline) {
+      if (item?.pipeline) {
         pipelines.add(item.pipeline);
       }
     });

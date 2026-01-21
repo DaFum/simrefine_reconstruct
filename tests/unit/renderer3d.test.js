@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Move mock definition inside vi.mock factory to avoid hoisting issues
 vi.mock('../../vendor/three.module.js', () => {
-  const mockFn = (impl) => vi.fn(impl);
+  const _mockFn = (impl) => vi.fn(impl);
 
   class MockVector3 {
     constructor(x, y, z) { this.x = x || 0; this.y = y || 0; this.z = z || 0; }
@@ -31,7 +31,6 @@ vi.mock('../../vendor/three.module.js', () => {
   }
 
   class MockColor {
-    constructor(hex) { }
     set() {}
     setHex() {}
     copy() { return this; }
@@ -159,13 +158,6 @@ vi.mock('../../vendor/three.module.js', () => {
         }
         clone() { return this; }
     },
-    LineBasicMaterial: class {
-        constructor() {
-            this.color = new MockColor();
-            this.userData = {};
-        }
-        clone() { return this; }
-    },
     SpriteMaterial: class { constructor() { this.map = {}; this.color = {}; this.userData = {}; } },
     Sprite: class { constructor() { this.position = new MockVector3(); this.scale = { set: vi.fn() }; this.material = { opacity: 1, rotation: 0 }; } },
     CanvasTexture: class {},
@@ -184,7 +176,6 @@ vi.mock('../../vendor/three.module.js', () => {
   };
 });
 
-import * as THREE from '../../vendor/three.module.js';
 import { TileRenderer } from '../../src/renderer3d.js';
 
 describe('TileRenderer', () => {

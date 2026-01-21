@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  applyStrainPenalty,
   calculateProductShares,
-  processReformer,
+  normalizeLiquidProducts,
+  processAlkylation,
   processFCC,
   processHydrocracker,
-  processAlkylation,
-  processSulfur,
-  applyStrainPenalty,
-  normalizeLiquidProducts
+  processReformer,
+  processSulfur
 } from '../../../../src/simulation/processors/ProductionProcessor.js';
 
 describe('ProductionProcessor', () => {

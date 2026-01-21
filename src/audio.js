@@ -47,7 +47,7 @@ export class AudioController {
     if (this.masterGain) {
       try {
         this.masterGain.disconnect();
-      } catch (e) {
+      } catch (_e) {
         // Ignore disconnect errors
       }
       this.masterGain = null;
@@ -496,9 +496,8 @@ export class AudioController {
       this._previousVolume = this.masterGain.gain.value;
       this.masterGain.gain.value = 0;
       return true; // Now muted
-    } else {
+    }
       this.masterGain.gain.value = this._previousVolume || 0.3;
       return false; // Now unmuted
-    }
   }
 }
