@@ -311,7 +311,7 @@ export class MarketSystem {
     const multiplier = clamp(1 - this.marketStress * 0.7, 0.55, 1.05);
     const carryingCost =
       storageUtil > 0.55
-        ? Math.pow(storageUtil, 1.35) * 340 + Math.max(0, storageUtil - 0.85) * 640
+        ? storageUtil ** 1.35 * 340 + Math.max(0, storageUtil - 0.85) * 640
         : storageUtil * 120;
 
     return { multiplier, carryingCost };

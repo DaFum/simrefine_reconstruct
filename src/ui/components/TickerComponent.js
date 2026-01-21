@@ -182,7 +182,7 @@ export class TickerComponent {
     // Build HTML
     let html = '';
 
-    items.forEach((item, index) => {
+    items.forEach((item, _index) => {
       if (item.type === 'divider') {
         html += '<span class="ticker-divider"></span>';
         return;
@@ -392,10 +392,9 @@ export class TickerComponent {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
       return true; // Now paused
-    } else {
+    }
       this._startAnimation();
       return false; // Now playing
-    }
   }
 
   /**
@@ -412,7 +411,7 @@ export class TickerComponent {
     if (this.animationFrame) {
       cancelAnimationFrame(this.animationFrame);
     }
-    if (this.element && this.element.parentNode) {
+    if (this.element?.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
   }

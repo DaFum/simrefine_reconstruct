@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  updateProductionMetrics,
-  updateFinancialMetrics,
-  updateEconomyMetrics,
-  updateOperationalMetrics,
-  updateFlowMetrics,
+  buildRecorderContext,
   buildScorecardContext,
-  buildRecorderContext
+  updateEconomyMetrics,
+  updateFinancialMetrics,
+  updateFlowMetrics,
+  updateOperationalMetrics,
+  updateProductionMetrics
 } from '../../../../src/simulation/processors/MetricsProcessor.js';
 
 describe('MetricsProcessor', () => {
@@ -479,7 +479,7 @@ describe('MetricsProcessor', () => {
       updateProductionMetrics(metrics, production);
 
       expect(metrics.gasoline).toBe(24000);
-      expect(isFinite(metrics.gasoline)).toBe(true);
+      expect(Number.isFinite(metrics.gasoline)).toBe(true);
     });
 
     it('should handle very small numbers', () => {
@@ -495,7 +495,7 @@ describe('MetricsProcessor', () => {
       updateProductionMetrics(metrics, production);
 
       expect(metrics.gasoline).toBeCloseTo(0, 2);
-      expect(isFinite(metrics.gasoline)).toBe(true);
+      expect(Number.isFinite(metrics.gasoline)).toBe(true);
     });
   });
 });

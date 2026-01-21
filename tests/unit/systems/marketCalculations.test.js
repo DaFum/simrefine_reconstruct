@@ -1,16 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  HOURS_PER_DAY,
-  perHourToPerDay,
-  WEIGHT_PROFILES,
   BASE_DEMAND,
+  calculateCarryingCost,
   calculateCostTarget,
   calculateFuturesTarget,
   calculateMarketPressures,
-  calculateCarryingCost,
   calculateMixBias,
   calculateProductDemand,
-  smoothValue
+  HOURS_PER_DAY,
+  perHourToPerDay,
+  smoothValue,
+  WEIGHT_PROFILES
 } from '../../../src/systems/marketCalculations.js';
 
 describe('marketCalculations', () => {
@@ -250,7 +250,7 @@ describe('marketCalculations', () => {
     it('should handle full utilization', () => {
       const cost = calculateCarryingCost(1.0);
       expect(cost).toBeGreaterThan(0);
-      expect(isFinite(cost)).toBe(true);
+      expect(Number.isFinite(cost)).toBe(true);
     });
   });
 
@@ -392,7 +392,7 @@ describe('marketCalculations', () => {
   describe('Edge Cases', () => {
     it('should handle extreme storage utilization', () => {
       const cost = calculateCarryingCost(1.5);
-      expect(isFinite(cost)).toBe(true);
+      expect(Number.isFinite(cost)).toBe(true);
     });
 
     it('should handle negative demand shortage', () => {

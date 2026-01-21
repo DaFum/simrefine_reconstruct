@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderScorecard, drawScoreTrend } from '../../../../src/ui/renderers/scorecardRenderer.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { drawScoreTrend, renderScorecard } from '../../../../src/ui/renderers/scorecardRenderer.js';
 
 describe('scorecardRenderer', () => {
   describe('renderScorecard', () => {

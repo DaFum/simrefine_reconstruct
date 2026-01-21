@@ -1,21 +1,21 @@
 import { MISSIONS } from "./content/missions.js";
-import { MarketSystem } from "./systems/MarketSystem.js";
-import { LogisticsSystem } from "./systems/LogisticsSystem.js";
-import { SupplyChainSystem } from "./systems/SupplyChainSystem.js";
-import { StaffingSystem } from "./systems/StaffingSystem.js";
+import { BASE_PRICES, DEFAULT_PARAMS, SCENARIOS, SPEED_PRESETS, UNIT_DEFINITIONS } from "./simulation/constants.js";
+import {
+  calculateEnvironmentMetrics,
+  calculateProductShares,
+  formatEnvironmentWarning,
+  getEnvironmentWarningSeverity,
+  shouldLogEnvironmentWarning,
+} from "./simulation/processors/index.js";
+import { clamp, perDayToPerHour, perHourToPerDay } from "./simulation/utils/calculations.js";
 import { BlendingSystem } from "./systems/BlendingSystem.js";
 import { DisasterSystem } from "./systems/DisasterSystem.js";
+import { LogisticsSystem } from "./systems/LogisticsSystem.js";
 import { MaintenanceSystem } from "./systems/MaintenanceSystem.js";
+import { MarketSystem } from "./systems/MarketSystem.js";
+import { StaffingSystem } from "./systems/StaffingSystem.js";
+import { SupplyChainSystem } from "./systems/SupplyChainSystem.js";
 import { TimeMachineSystem } from "./systems/TimeMachineSystem.js";
-import { SCENARIOS, UNIT_DEFINITIONS, SPEED_PRESETS, DEFAULT_PARAMS, BASE_PRICES } from "./simulation/constants.js";
-import { clamp, perDayToPerHour, perHourToPerDay } from "./simulation/utils/calculations.js";
-import {
-  calculateProductShares,
-  calculateEnvironmentMetrics,
-  shouldLogEnvironmentWarning,
-  getEnvironmentWarningSeverity,
-  formatEnvironmentWarning,
-} from "./simulation/processors/index.js";
 
 const PRODUCT_LABELS = { gasoline: "gasoline", diesel: "diesel", jet: "jet fuel" };
 const HOURS_PER_DAY = 24;
@@ -827,7 +827,7 @@ export class RefinerySimulation {
         scenario
     }) || { penalties: 0 };
 
-    const maintenanceReport = this.maintenanceSystem?.update(deltaMinutes, {
+    const _maintenanceReport = this.maintenanceSystem?.update(deltaMinutes, {
         scenario,
         staffingEffects
     }) || {};
@@ -835,7 +835,7 @@ export class RefinerySimulation {
     this.timeMachineSystem?.update(deltaMinutes);
 
     // Apply staffing effects to reliability calculations
-    const staffingReliabilityBonus = staffingEffects.safetyBonus || 0;
+    const _staffingReliabilityBonus = staffingEffects.safetyBonus || 0;
     const operatorErrorPenalty = staffingEffects.operatorErrorRate > 0.03 ?
         (staffingEffects.operatorErrorRate - 0.02) * 500 : 0;
 
@@ -864,7 +864,7 @@ export class RefinerySimulation {
 
     // Add disaster penalties and operator error costs to total penalties
     const disasterPenalty = disasterReport.penalties || 0;
-    let penalty = incidentsRisk.incidentPenalty + logisticsReport.penalty + environmentPenalty + disasterPenalty + operatorErrorPenalty;
+    const penalty = incidentsRisk.incidentPenalty + logisticsReport.penalty + environmentPenalty + disasterPenalty + operatorErrorPenalty;
 
     // Add staffing labor costs and maintenance costs to fixed overhead
     const laborCost = staffingEffects.laborCost || 0;
@@ -1515,7 +1515,7 @@ export class RefinerySimulation {
       const bufferLen = this._perfBuffer.length;
       const prevIndex = (this._perfHead - 1 + bufferLen) % bufferLen;
       previous = this._perfBuffer[prevIndex];
-    } else if (this.performanceHistory && this.performanceHistory.length) {
+    } else if (this.performanceHistory?.length) {
       previous = this.performanceHistory[this.performanceHistory.length - 1];
     }
 
@@ -1621,7 +1621,7 @@ export class RefinerySimulation {
       }
     }
 
-    if (this.activeMission && this.activeMission.completed) {
+    if (this.activeMission?.completed) {
        highlights.push(`Mission '${this.activeMission.title}' objectives met.`);
     }
 
@@ -1874,7 +1874,7 @@ export class RefinerySimulation {
       kind: "turnaround",
       severity: "warning",
       summary: `${turnaroundType.charAt(0).toUpperCase() + turnaroundType.slice(1)} turnaround in progress`,
-      cause: "Estimated " + Math.round(downtime) + " minutes until restart.",
+      cause: `Estimated ${Math.round(downtime)} minutes until restart.`,
       guidance: "Expect improved integrity once crews wrap up.",
       recordedAt: this._formatTime(),
     };
@@ -1889,7 +1889,7 @@ export class RefinerySimulation {
 
     this.pushLog(
       "info",
-      unit.name + ` ${turnaroundType} turnaround started; crews draining and opening equipment.`,
+      `${unit.name} ${turnaroundType} turnaround started; crews draining and opening equipment.`,
       { unitId }
     );
     return true;
@@ -2372,13 +2372,6 @@ export class RefinerySimulation {
    */
   setMaintenanceStrategy(unitId, strategyId) {
     return this.maintenanceSystem?.setStrategy(unitId, strategyId);
-  }
-
-  /**
-   * Schedule a turnaround
-   */
-  scheduleTurnaround(unitId, turnaroundType, startTime = null) {
-    return this.maintenanceSystem?.scheduleTurnaround(unitId, turnaroundType, startTime);
   }
 
   /**

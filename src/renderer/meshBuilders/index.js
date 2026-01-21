@@ -3,11 +3,11 @@
  * Factory for creating unit meshes based on style
  */
 
-import { buildTowersMesh } from "./towersMeshBuilder.js";
-import { buildReactorMesh } from "./reactorMeshBuilder.js";
-import { buildSupportMesh } from "./supportMeshBuilder.js";
-import { buildRectMesh } from "./rectMeshBuilder.js";
 import { buildDefaultMesh } from "./defaultMeshBuilder.js";
+import { buildReactorMesh } from "./reactorMeshBuilder.js";
+import { buildRectMesh } from "./rectMeshBuilder.js";
+import { buildSupportMesh } from "./supportMeshBuilder.js";
+import { buildTowersMesh } from "./towersMeshBuilder.js";
 
 export {
   buildTowersMesh,

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/simulation.js', () => {
   return {
@@ -125,9 +125,9 @@ vi.mock('../../src/commandSystem.js', () => {
 vi.mock('../../src/themeManager.js', () => ({ ThemeManager: vi.fn() }));
 vi.mock('../../src/windowManager.js', () => ({ WindowManager: vi.fn() }));
 
+import { TileRenderer } from '../../src/renderer3d.js';
 import { RefinerySimulation } from '../../src/simulation.js';
 import { UIController } from '../../src/ui.js';
-import { TileRenderer } from '../../src/renderer3d.js';
 
 describe('Main Entry Point', () => {
   beforeEach(() => {

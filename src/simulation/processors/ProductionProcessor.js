@@ -11,9 +11,9 @@ import { clamp, perDayToPerHour, perHourToPerDay } from "../utils/calculations.j
 export function calculateProductShares(scenario, focus) {
   const centered = focus - 0.5;
 
-  let gasShare = clamp(0.08 + centered * 0.05, 0.035, 0.16);
+  const gasShare = clamp(0.08 + centered * 0.05, 0.035, 0.16);
   let naphthaShare = clamp(0.36 + centered * 0.25, 0.26, 0.55);
-  let keroseneShare = 0.11 + scenario.jetBias * 0.05;
+  const keroseneShare = 0.11 + scenario.jetBias * 0.05;
   let dieselShare = clamp(0.27 - centered * 0.14 + scenario.dieselBias * 0.06, 0.18, 0.36);
   let heavyShare = clamp(0.17 - centered * 0.06, 0.11, 0.26);
 

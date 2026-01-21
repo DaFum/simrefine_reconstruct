@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from '../../vendor/three.module.js';
 
 // Mock canvas
@@ -32,12 +32,12 @@ vi.mock('../../vendor/three.module.js', async () => {
             if (hex !== undefined) this.set(hex);
             MockColor.instances++;
         }
-        set(hex) { return this; }
-        copy(c) { return this; }
+        set(_hex) { return this; }
+        copy(_c) { return this; }
         clone() { return new MockColor(); }
-        lerp(c, t) { return this; }
-        multiplyScalar(s) { return this; }
-        equals(c) { return false; }
+        lerp(_c, _t) { return this; }
+        multiplyScalar(_s) { return this; }
+        equals(_c) { return false; }
         getHex() { return 0; }
     }
     MockColor.instances = 0;
@@ -82,16 +82,16 @@ vi.mock('../../vendor/three.module.js', async () => {
         SpriteMaterial: class { constructor() { this.color = new MockColor(); } },
         Sprite: class { constructor() { this.position = { set: () => {}, copy: () => {} }; this.scale = { set: () => {} }; this.material = { opacity: 1 }; } },
         TextureLoader: class { load() { return {}; } },
-        CanvasTexture: class { constructor() { } },
+        CanvasTexture: class {},
         Raycaster: class { setFromCamera() {}; ray = { intersectPlane: () => false }; },
-        Plane: class { constructor() {} },
+        Plane: class {},
         PlaneGeometry: class { constructor() { this.translate = () => {}; } },
         BoxGeometry: class { constructor() { this.translate = () => {}; } },
-        CylinderGeometry: class { constructor() {} },
-        CircleGeometry: class { constructor() {} },
-        RingGeometry: class { constructor() {} },
+        CylinderGeometry: class {},
+        CircleGeometry: class {},
+        RingGeometry: class {},
         TubeGeometry: class { constructor() { this.clone = () => new this.constructor(); } },
-        CatmullRomCurve3: class { constructor() {} },
+        CatmullRomCurve3: class {},
         InstancedMesh: class { constructor() { this.instanceMatrix = { setUsage: () => {} }; } setMatrixAt() {} },
         HemisphereLight: class { constructor() { this.color = { set: () => {} }; this.groundColor = { set: () => {} }; } },
         DirectionalLight: class { constructor() { this.position = { set: () => {} }; this.color = { set: () => {} }; } },
@@ -105,7 +105,7 @@ vi.mock('../../vendor/three.module.js', async () => {
         LineBasicMaterial: class { constructor() { this.color = new MockColor(); this.userData = {}; } },
         LineSegments: class { constructor() { this.position = { y: 0 }; } },
         BufferGeometry: class { setAttribute() {} },
-        Float32BufferAttribute: class { constructor() {} },
+        Float32BufferAttribute: class {},
         Object3D: class { constructor() { this.position = { copy: () => {} }; this.lookAt = () => {}; this.updateMatrix = () => {}; } },
     };
 });
@@ -148,7 +148,7 @@ describe('TileRenderer Performance', () => {
         });
 
         // Reset counter after initialization (initialization creates colors)
-        const initialInstances = THREE.Color.instances;
+        const _initialInstances = THREE.Color.instances;
         THREE.Color.instances = 0;
 
         // Run render loop once
@@ -163,7 +163,7 @@ describe('TileRenderer Performance', () => {
     it('should reuse meshes when spawning ripples', () => {
         renderer = new TileRenderer(container, {}, [], []);
 
-        const initialMeshCount = THREE.Mesh.instances;
+        const _initialMeshCount = THREE.Mesh.instances;
         THREE.Mesh.instances = 0;
 
         // Spawn first ripple (creates mesh)

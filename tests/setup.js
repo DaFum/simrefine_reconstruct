@@ -23,7 +23,7 @@ global.AudioContext = class {
       stop: vi.fn(),
       disconnect: vi.fn() // Added disconnect
     }));
-    this.createBuffer = vi.fn((channels, length, sampleRate) => ({
+    this.createBuffer = vi.fn((_channels, length, _sampleRate) => ({
       getChannelData: vi.fn(() => new Float32Array(length))
     }));
     this.createBiquadFilter = vi.fn(() => ({

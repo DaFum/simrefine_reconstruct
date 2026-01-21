@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { PIPELINE_CONFIGS } from '../../../src/config/pipelines.js';
 
 describe('PIPELINE_CONFIGS', () => {
@@ -176,7 +176,7 @@ describe('PIPELINE_CONFIGS', () => {
   describe('Edge Cases', () => {
     it('should handle iteration over all pipelines', () => {
       let count = 0;
-      PIPELINE_CONFIGS.forEach(() => count++);
+      PIPELINE_CONFIGS.forEach(() => { count++; });
       expect(count).toBe(5);
     });
 

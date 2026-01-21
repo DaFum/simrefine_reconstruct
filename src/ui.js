@@ -251,7 +251,7 @@ export class UIController {
       elements.logisticsExpedite.addEventListener("click", () => {
         this.audio?.play('click');
         const result = simulation.requestExtraShipment();
-        if (result && result.product) {
+        if (result?.product) {
           this.flashStorageLevel(result.product);
         }
         this.update(simulation.getLogisticsState(), null);
@@ -262,7 +262,7 @@ export class UIController {
       elements.logisticsDelay.addEventListener("click", () => {
         this.audio?.play('click');
         const delayed = simulation.delayNextShipment();
-        if (delayed && delayed.product) {
+        if (delayed?.product) {
           this.flashStorageLevel(delayed.product);
         }
         this.update(simulation.getLogisticsState(), null);
@@ -273,7 +273,7 @@ export class UIController {
       elements.logisticsExpand.addEventListener("click", () => {
         this.audio?.play('click');
         const outcome = simulation.expandStorageCapacity();
-        if (outcome && outcome.level) {
+        if (outcome?.level) {
           this.update(simulation.getLogisticsState(), null);
         } else {
           this.update(simulation.getLogisticsState(), null);
@@ -736,7 +736,7 @@ export class UIController {
         let last = null;
         try {
             last = JSON.parse(this.lastLogSignature);
-        } catch (e) {
+        } catch (_e) {
             // Fallback for old string format or empty
         }
 
@@ -1578,7 +1578,7 @@ export class UIController {
     const animate = (now) => {
         const elapsed = now - startTime;
         const progress = Math.min(elapsed / duration, 1);
-        const ease = 1 - Math.pow(1 - progress, 3); // cubic ease out
+        const ease = 1 - (1 - progress) ** 3; // cubic ease out
 
         const current = startValue + (targetValue - startValue) * ease;
         element.textContent = formatter(current);

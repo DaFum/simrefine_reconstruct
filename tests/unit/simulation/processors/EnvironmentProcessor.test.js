@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   calculateEnvironmentMetrics,
-  shouldLogEnvironmentWarning,
+  formatEnvironmentWarning,
   getEnvironmentWarningSeverity,
-  formatEnvironmentWarning
+  shouldLogEnvironmentWarning
 } from '../../../../src/simulation/processors/EnvironmentProcessor.js';
 
 describe('EnvironmentProcessor', () => {
@@ -299,7 +299,7 @@ describe('EnvironmentProcessor', () => {
 
       const result = calculateEnvironmentMetrics(highWaste);
       expect(result.carbonPerHour).toBeGreaterThan(0);
-      expect(isFinite(result.carbonPerHour)).toBe(true);
+      expect(Number.isFinite(result.carbonPerHour)).toBe(true);
     });
   });
 });

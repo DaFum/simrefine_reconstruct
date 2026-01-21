@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeManager } from '../../src/themeManager.js';
 
 describe('ThemeManager', () => {
@@ -122,7 +122,7 @@ describe('ThemeManager', () => {
     });
 
     it('should cycle through all themes', () => {
-      const themes = ['twilight', 'daybreak', 'emergency', 'training'];
+      const _themes = ['twilight', 'daybreak', 'emergency', 'training'];
       const visited = new Set();
       
       themeManager.setTheme('twilight');

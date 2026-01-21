@@ -4,8 +4,6 @@
  * and quality specifications for final products.
  */
 
-import { clamp } from "../simulation/utils/calculations.js";
-
 export const GASOLINE_GRADES = {
   regular: {
     id: 'regular',
@@ -285,12 +283,12 @@ export class BlendingSystem {
     Object.entries(recipe).forEach(([stockId, fraction]) => {
       const stock = BLENDSTOCKS[stockId];
       if (stock && fraction > 0) {
-        rvpSum += Math.pow(stock.rvp, 1.25) * fraction;
+        rvpSum += stock.rvp ** 1.25 * fraction;
         totalVolume += fraction;
       }
     });
 
-    return totalVolume > 0 ? Math.pow(rvpSum / totalVolume, 0.8) : 0;
+    return totalVolume > 0 ? (rvpSum / totalVolume) ** 0.8 : 0;
   }
 
   /**
@@ -377,15 +375,15 @@ export class BlendingSystem {
   /**
    * Optimize blend recipe to meet target octane with minimum cost
    */
-  optimizeRecipe(targetOctane, constraints = {}) {
+  optimizeRecipe(targetOctane, _constraints = {}) {
     const stocks = Object.entries(BLENDSTOCKS)
-      .filter(([id, s]) => this.blendstockInventory[id]?.level > 0)
+      .filter(([id, _s]) => this.blendstockInventory[id]?.level > 0)
       .sort((a, b) => b[1].octane - a[1].octane); // Sort by octane, high to low
 
     // Simple linear programming approach
-    let recipe = {};
+    const recipe = {};
     let remaining = 1.0;
-    let currentOctane = 0;
+    let _currentOctane = 0;
 
     // Add high-octane stocks until we meet target
     for (const [stockId, stock] of stocks) {
@@ -395,7 +393,7 @@ export class BlendingSystem {
       const fraction = Math.min(remaining, available, 0.5); // Max 50% of any one stock
 
       recipe[stockId] = fraction;
-      currentOctane += stock.octane * fraction;
+      _currentOctane += stock.octane * fraction;
       remaining -= fraction;
 
       if (this.calculateBlendOctane(recipe) >= targetOctane) {
@@ -411,7 +409,9 @@ export class BlendingSystem {
     // Normalize to sum to 1
     const total = Object.values(recipe).reduce((s, v) => s + v, 0);
     if (total > 0) {
-      Object.keys(recipe).forEach(k => recipe[k] /= total);
+      Object.keys(recipe).forEach((k) => {
+        recipe[k] /= total;
+      });
     }
 
     return {

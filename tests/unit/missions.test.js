@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MISSIONS } from '../../src/content/missions.js';
 
 describe('MISSIONS data structure', () => {
@@ -152,9 +152,9 @@ describe('MISSIONS data structure', () => {
       const missionMap = new Map(MISSIONS.map(m => [m.id, m]));
       
       let current = MISSIONS[0];
-      let visited = new Set();
+      const visited = new Set();
       
-      while (current && current.next) {
+      while (current?.next) {
         expect(visited.has(current.id)).toBe(false); // No cycles
         visited.add(current.id);
         

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { UNIT_CONFIGS } from '../../../src/config/units.js';
 
 describe('UNIT_CONFIGS', () => {
@@ -185,7 +185,7 @@ describe('UNIT_CONFIGS', () => {
   describe('Edge Cases', () => {
     it('should handle iteration over all units', () => {
       let count = 0;
-      UNIT_CONFIGS.forEach(() => count++);
+      UNIT_CONFIGS.forEach(() => { count++; });
       expect(count).toBe(6);
     });
 

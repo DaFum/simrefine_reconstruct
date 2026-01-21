@@ -140,7 +140,7 @@ export function calculateMarketPressures(params) {
  */
 export function calculateCarryingCost(storageUtil) {
   if (storageUtil > 0.55) {
-    return Math.pow(storageUtil, 1.35) * 340 + Math.max(0, storageUtil - 0.85) * 640;
+    return storageUtil ** 1.35 * 340 + Math.max(0, storageUtil - 0.85) * 640;
   }
   return storageUtil * 120;
 }

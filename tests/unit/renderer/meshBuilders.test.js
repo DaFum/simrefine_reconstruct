@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildUnitMesh } from '../../../src/renderer/meshBuilders/index.js';
 
 // Mock THREE.js
@@ -185,42 +185,42 @@ describe('Mesh Builders', () => {
       styles.forEach(style => {
         const result = buildUnitMesh(style, baseContext);
         expect(typeof result.indicatorAnchor).toBe('number');
-        expect(isFinite(result.indicatorAnchor)).toBe(true);
+        expect(Number.isFinite(result.indicatorAnchor)).toBe(true);
       });
     });
   });
 
   describe('Style-Specific Behaviors', () => {
     it('should create multiple towers for towers style', () => {
-      const result = buildUnitMesh('towers', baseContext);
+      const _result = buildUnitMesh('towers', baseContext);
 
       // Towers style should add multiple meshes (main tower + secondary towers + accessories)
       expect(mockGroup.add.mock.calls.length).toBeGreaterThan(3);
     });
 
     it('should create spherical vessel for reactor style', () => {
-      const result = buildUnitMesh('reactor', baseContext);
+      const _result = buildUnitMesh('reactor', baseContext);
 
       // Reactor should have multiple components (pedestal, vessel, band, riser, cyclone)
       expect(mockGroup.add.mock.calls.length).toBeGreaterThan(4);
     });
 
     it('should create horizontal drum for support style', () => {
-      const result = buildUnitMesh('support', baseContext);
+      const _result = buildUnitMesh('support', baseContext);
 
       // Support should have cradle, drum, and scrubber
       expect(mockGroup.add.mock.calls.length).toBeGreaterThan(2);
     });
 
     it('should create rectangular blocks for rect style', () => {
-      const result = buildUnitMesh('rect', baseContext);
+      const _result = buildUnitMesh('rect', baseContext);
 
       // Rect should have pedestal, block, roof, and stack
       expect(mockGroup.add.mock.calls.length).toBeGreaterThan(3);
     });
 
     it('should create simple box for default style', () => {
-      const result = buildUnitMesh('default', baseContext);
+      const _result = buildUnitMesh('default', baseContext);
 
       // Default should have block and topper
       expect(mockGroup.add.mock.calls.length).toBeGreaterThanOrEqual(2);

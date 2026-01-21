@@ -455,7 +455,7 @@ body {
 }
 
 .map-logistics[hidden] {
-  display: none !important;
+  display: none;
 }
 
 .map-logistics-header {

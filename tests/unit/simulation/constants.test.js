@@ -1,16 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  PRODUCT_LABELS,
-  HOURS_PER_DAY,
-  SHIPMENT_PARCEL_SIZES,
-  SHIPMENT_HORIZON_HOURS,
-  BASE_CRUDE_THROUGHPUT,
   BASE_PRICES,
-  UNIT_CATEGORIES,
-  UNIT_DEFINITIONS,
-  SPEED_PRESETS,
   DEFAULT_PARAMS,
-  SCENARIOS
+  HOURS_PER_DAY,
+  PRODUCT_LABELS,
+  SCENARIOS,
+  SHIPMENT_HORIZON_HOURS,
+  SHIPMENT_PARCEL_SIZES,
+  SPEED_PRESETS,
+  UNIT_CATEGORIES,
+  UNIT_DEFINITIONS
 } from '../../../src/simulation/constants.js';
 
 describe('Simulation Constants', () => {

@@ -1,18 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  clamp,
-  randomRange,
-  perDayToPerHour,
-  perHourToPerDay,
-  round,
+  applyStrainPenalties,
   calculateDistillationShares,
   calculateEffectiveCapacity,
-  updateUnitMetrics,
   calculateEnvironmentPenalty,
   calculateProductPrices,
   calculateProductRevenue,
-  applyStrainPenalties,
-  capLiquidProducts
+  capLiquidProducts,
+  clamp,
+  perDayToPerHour,
+  perHourToPerDay,
+  randomRange,
+  round,
+  updateUnitMetrics
 } from '../../../../src/simulation/utils/calculations.js';
 
 describe('Basic Utilities', () => {

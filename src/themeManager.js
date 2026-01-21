@@ -101,7 +101,7 @@ export class ThemeManager {
     });
 
     this.eventBus.on("ALERT_CLEARED", (alert) => {
-        if (alert && alert.id) {
+        if (alert?.id) {
             this.activeDangerAlerts.delete(alert.id);
         }
 
