@@ -52,6 +52,8 @@ export class RefinerySimulation {
       this.unitMap[unit.id] = unit;
     });
 
+    this.unitCount = this.units.length;
+
     this.metrics = {
       gasoline: 0,
       diesel: 0,
@@ -1216,7 +1218,7 @@ export class RefinerySimulation {
     });
 
     const reliability = clamp(
-      integritySum / Math.max(1, Object.keys(units).length),
+      integritySum / Math.max(1, this.unitCount),
       0,
       1
     );
