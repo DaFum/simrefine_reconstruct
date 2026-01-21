@@ -1652,7 +1652,7 @@ export class TileRenderer {
 
     const hullLength = this.tileScale * 1.85;
     const hullWidth = this.tileScale * 0.56;
-    const hullHeight = 0.74;
+    const hullHeight = this.tileScale * 0.4;
 
     const hullShape = new THREE.Shape();
     const halfLength = hullLength / 2;
