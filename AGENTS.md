@@ -256,11 +256,17 @@ This application can be deployed to any static web host:
 
 ---
 
-## Additional Resources
 
+## 🗂️ Documentation 
+
+How you will handle the documentation files:
+
+- **`AGENTS.md` files**: Update when they are outdated and add new `AGENTS.md` files for folders getting harder to understand.
+- **`game-features-list.md` file**: A list of integrated features to provide a quick summary.  
 - **Three.js Documentation:** https://threejs.org/docs/
 - **ES6 Modules Guide:** https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules
 - **info.md:** Historical context about the original SimRefinery game
+
 
 ---
 
@@ -269,3 +275,7 @@ This application can be deployed to any static web host:
 This is a reconstruction/prototype of SimRefinery, originally developed by Maxis Business Simulations in 1993 for Chevron. The original game was never publicly released. This project recreates the refinery management simulation concept as a modern web application.
 
 For detailed historical context, see `info.md`.
+
+---
+
+_“Complexity is not an excuse for friction.”_
