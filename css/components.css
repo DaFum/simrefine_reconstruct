@@ -325,11 +325,26 @@
   border-radius: 50%;
   box-shadow: 0 0 5px rgba(255, 158, 66, 0.6);
   cursor: grab;
-  margin-top: -5px; /* Adjust if needed to vertically center */
+  margin-top: -4px; /* Vertically centers 18px thumb on 10px track */
 }
+
+.control-group input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 18px;
+  background: var(--accent-orange);
+  border: 1px solid #000;
+  box-shadow: 0 0 10px rgba(255, 158, 66, 0.4);
+  cursor: ew-resize;
+  border-radius: 0;
+}
+
 .control-group input[type="range"]::-webkit-slider-runnable-track {
     height: 10px;
     border-radius: 5px;
+}
+
+.control-group input[type="range"]::-moz-range-track {
+  background: transparent;
 }
 
 .control-group input[type="range"]:active::-webkit-slider-thumb {
@@ -377,6 +392,16 @@
   background: #2c313a;
   color: #fff;
   border-color: #666;
+}
+
+.speed-button:focus-visible {
+  outline: 1px dotted var(--accent-orange);
+  outline-offset: 2px;
+}
+
+.speed-button:active {
+  transform: translateY(1px);
+  background: #000;
 }
 
 .speed-button.active {
