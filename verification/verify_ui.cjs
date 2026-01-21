@@ -1,12 +1,15 @@
 const { chromium } = require('playwright');
-const path = require('path');
+
+const VERIFY_PORT = process.env.VERIFY_PORT || '3000';
+const VERIFY_HOST = process.env.VERIFY_HOST || 'localhost';
+const VERIFY_BASE_URL = process.env.VERIFY_BASE_URL || `http://${VERIFY_HOST}:${VERIFY_PORT}`;
 
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
 
   // Navigate to local server
-  await page.goto('http://localhost:3000');
+  await page.goto(VERIFY_BASE_URL);
 
   // Wait for UI to load
   await page.waitForSelector('.window-title');

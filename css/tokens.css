@@ -30,6 +30,9 @@
   --font-sans: "Chakra Petch", sans-serif;
 }
 
+/**
+ * Uses :root values for default styling.
+ */
 /* Theme: Twilight (Default) */
 [data-theme="twilight"] {
   --desktop-bg: #0f1013;
@@ -60,5 +63,13 @@
   --header-grad-top: #9f4646;
   --header-grad-bottom: #652424;
   --window-border-light: #ffb6b6;
+  --accent-blue: #ff6b6b;
+}
+
+/* Theme: Training (High Contrast) */
+[data-theme="training"] {
+  --desktop-bg: #2c3e50;
+  --header-grad-top: #6a9f46;
+  --header-grad-bottom: #416524;
   --accent-blue: #ff6b6b;
 }

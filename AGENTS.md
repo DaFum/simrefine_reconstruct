@@ -257,6 +257,8 @@ This application can be deployed to any static web host:
 ---
 
 
+## Additional Resources
+
 ## 🗂️ Documentation 
 
 How you will handle the documentation files:
