@@ -47,7 +47,10 @@ export class RefinerySimulation {
     this.activeScenario = this.scenarios[this.activeScenarioKey];
 
     this.units = this._createUnits();
-    this.unitMap = Object.fromEntries(this.units.map((unit) => [unit.id, unit]));
+    this.unitMap = Object.create(null);
+    this.units.forEach((unit) => {
+      this.unitMap[unit.id] = unit;
+    });
 
     this.metrics = {
       gasoline: 0,
@@ -142,7 +145,7 @@ export class RefinerySimulation {
     this.shipmentHorizonHours = SHIPMENT_HORIZON_HOURS;
     this.operationalStrain = 0;
 
-    this.unitOverrides = {};
+    this.unitOverrides = Object.create(null);
     this.emergencyShutdown = false;
     this.processTopology = this._createTopology();
 
@@ -456,7 +459,7 @@ export class RefinerySimulation {
     this.startMission("tutorial_stabilize");
     this.shipmentHorizonHours = SHIPMENT_HORIZON_HOURS;
     this.operationalStrain = 0;
-    this.unitOverrides = {};
+    this.unitOverrides = Object.create(null);
     this.emergencyShutdown = false;
     this.units.forEach((unit) => {
       unit.throughput = 0;
@@ -2724,7 +2727,7 @@ export class RefinerySimulation {
       });
     }
 
-    this.unitOverrides = {};
+    this.unitOverrides = Object.create(null);
     if (snapshot.unitOverrides && typeof snapshot.unitOverrides === "object") {
       Object.entries(snapshot.unitOverrides).forEach(([unitId, override]) => {
         if (!override || typeof override !== "object") {
@@ -2876,6 +2879,9 @@ export class RefinerySimulation {
   }
 
   setUnitThrottle(unitId, fraction, options = {}) {
+    if (unitId === "__proto__" || unitId === "constructor" || unitId === "prototype") {
+      return;
+    }
     const unit = this.unitMap[unitId];
     if (!unit) {
       return;
@@ -2908,6 +2914,9 @@ export class RefinerySimulation {
   }
 
   setUnitOffline(unitId, offline, options = {}) {
+    if (unitId === "__proto__" || unitId === "constructor" || unitId === "prototype") {
+      return;
+    }
     const unit = this.unitMap[unitId];
     if (!unit) {
       return;
@@ -2963,6 +2972,9 @@ export class RefinerySimulation {
   }
 
   clearUnitOverride(unitId, options = {}) {
+    if (unitId === "__proto__" || unitId === "constructor" || unitId === "prototype") {
+      return;
+    }
     const unit = this.unitMap[unitId];
     if (!unit) {
       return;
