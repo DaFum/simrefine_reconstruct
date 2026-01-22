@@ -53,7 +53,20 @@ export class AudioController {
       this.masterGain = null;
     }
     this.sounds.clear();
+    this._sharedNoiseBuffer = null;
     this.enabled = false;
+  }
+
+  _getNoiseBuffer() {
+    if (!this._sharedNoiseBuffer && this.context) {
+      const bufferSize = this.context.sampleRate * 2.0; // 2 seconds of noise
+      this._sharedNoiseBuffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+      const data = this._sharedNoiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+    }
+    return this._sharedNoiseBuffer;
   }
 
   _generateSounds() {
@@ -118,16 +131,12 @@ export class AudioController {
   }
 
   _createNoiseSound(duration, vol) {
-    const bufferSize = this.context.sampleRate * duration;
-    const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
-    const data = buffer.getChannelData(0);
-
-    for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
-    }
+    const buffer = this._getNoiseBuffer();
+    if (!buffer) return;
 
     const noise = this.context.createBufferSource();
     noise.buffer = buffer;
+    noise.loop = true;
 
     const gain = this.context.createGain();
     gain.gain.setValueAtTime(vol, this.context.currentTime);
@@ -142,7 +151,9 @@ export class AudioController {
     filter.connect(gain);
     gain.connect(this.masterGain);
 
-    noise.start();
+    // Play a random segment of the noise buffer
+    const startTime = Math.random() * (buffer.duration - duration);
+    noise.start(this.context.currentTime, startTime, duration);
   }
 
   _createChord(freqs, duration) {
@@ -270,16 +281,12 @@ export class AudioController {
 
   // Steam hiss - filtered noise
   _createSteamHiss() {
-    const bufferSize = this.context.sampleRate * 0.5;
-    const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
-    const data = buffer.getChannelData(0);
-
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
+    const buffer = this._getNoiseBuffer();
+    if (!buffer) return;
 
     const noise = this.context.createBufferSource();
     noise.buffer = buffer;
+    noise.loop = true;
 
     const filter = this.context.createBiquadFilter();
     filter.type = 'highpass';
@@ -293,7 +300,10 @@ export class AudioController {
     filter.connect(gain);
     gain.connect(this.masterGain);
 
-    noise.start();
+    // Play random 0.4s segment
+    const duration = 0.4;
+    const startTime = Math.random() * (buffer.duration - duration);
+    noise.start(this.context.currentTime, startTime, duration);
   }
 
   // Machinery loop - rhythmic pulsing
@@ -365,25 +375,23 @@ export class AudioController {
     osc.stop(now + 0.5);
 
     // Noise burst
-    const bufferSize = this.context.sampleRate * 0.3;
-    const buffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
-    const data = buffer.getChannelData(0);
+    const buffer = this._getNoiseBuffer();
+    if (buffer) {
+      const noise = this.context.createBufferSource();
+      noise.buffer = buffer;
+      noise.loop = true;
 
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
+      const noiseGain = this.context.createGain();
+      noiseGain.gain.setValueAtTime(0.3, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+
+      noise.connect(noiseGain);
+      noiseGain.connect(this.masterGain);
+
+      const duration = 0.3;
+      const startTime = Math.random() * (buffer.duration - duration);
+      noise.start(now, startTime, duration);
     }
-
-    const noise = this.context.createBufferSource();
-    noise.buffer = buffer;
-
-    const noiseGain = this.context.createGain();
-    noiseGain.gain.setValueAtTime(0.3, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-
-    noise.connect(noiseGain);
-    noiseGain.connect(this.masterGain);
-
-    noise.start(now);
   }
 
   // Evacuation alarm - alternating tones

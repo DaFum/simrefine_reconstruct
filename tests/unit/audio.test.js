@@ -209,17 +209,23 @@ describe('AudioController', () => {
       window.dispatchEvent(new Event('click'));
     });
 
-    it('should create buffer with correct duration', () => {
+    it('should create shared buffer with fixed duration on first call', () => {
       const createBufferSpy = vi.spyOn(audio.context, 'createBuffer');
       const duration = 0.5;
       
       audio._createNoiseSound(duration, 0.3);
       
+      // Should create a 2-second buffer once
       expect(createBufferSpy).toHaveBeenCalledWith(
         1,
-        audio.context.sampleRate * duration,
+        audio.context.sampleRate * 2.0,
         audio.context.sampleRate
       );
+
+      // Subsequent call should not create a new buffer
+      createBufferSpy.mockClear();
+      audio._createNoiseSound(duration, 0.3);
+      expect(createBufferSpy).not.toHaveBeenCalled();
     });
 
     it('should create buffer source', () => {
