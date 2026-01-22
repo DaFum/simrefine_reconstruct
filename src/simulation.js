@@ -305,13 +305,20 @@ export class RefinerySimulation {
   }
 
   getSpeedState() {
+    // Only map presets once or if they change (which they don't here)
+    if (!this._cachedSpeedPresets) {
+      this._cachedSpeedPresets = this.speedPresets.map((entry) => ({ ...entry }));
+    }
+
+    // We can reuse a single object if we want, but let's just optimize the presets part first
+    // as per instructions, avoiding the map every time.
     return {
       multiplier: this.speedMultiplier,
       min: this.minSpeedMultiplier,
       max: this.maxSpeedMultiplier,
       baseMinutesPerSecond: this.baseSpeed,
       minutesPerSecond: this.speed,
-      presets: this.speedPresets.map((entry) => ({ ...entry })),
+      presets: this._cachedSpeedPresets,
     };
   }
 
@@ -502,7 +509,10 @@ export class RefinerySimulation {
   }
 
   getScenarioList() {
-    return Object.values(this.scenarios);
+    if (!this._cachedScenarioList) {
+      this._cachedScenarioList = Object.values(this.scenarios);
+    }
+    return this._cachedScenarioList;
   }
 
   getMarketState() {
@@ -1430,14 +1440,21 @@ export class RefinerySimulation {
 
   getPerformanceHistory() {
     if (this._perfBuffer) {
+        // Return a cached Float32Array to avoid allocation per frame
+        if (!this._cachedPerformanceHistory || this._cachedPerformanceHistory.length !== this._perfCount) {
+             this._cachedPerformanceHistory = new Float32Array(this._perfCount);
+        }
+
         const bufferLen = this._perfBuffer.length;
-        const result = new Array(this._perfCount);
         let ptr = (this._perfHead - this._perfCount + bufferLen) % bufferLen;
+
+        // Unroll simple copy if contiguous, but ring buffer wrap-around makes it tricky.
+        // Simple loop into the TypedArray is still much faster/efficient than new Array() + push.
         for (let i = 0; i < this._perfCount; i++) {
-            result[i] = this._perfBuffer[ptr];
+            this._cachedPerformanceHistory[i] = this._perfBuffer[ptr];
             ptr = (ptr + 1) % bufferLen;
         }
-        return result;
+        return this._cachedPerformanceHistory;
     }
     // Fallback if buffer not initialized yet (though it should be)
     return [];
@@ -1448,7 +1465,9 @@ export class RefinerySimulation {
   }
 
   getUnits() {
-    return this.units.map((unit) => ({ ...unit }));
+    // Return the live array to avoid allocation overhead in render loop.
+    // Callers must be trusted not to mutate, or we accept the trade-off for performance.
+    return this.units;
   }
 
   getUnit(id) {
@@ -1637,13 +1656,23 @@ export class RefinerySimulation {
   }
 
   _formatProductLabel(product) {
+    if (!this._productLabelCache) {
+      this._productLabelCache = new Map();
+    }
+    if (this._productLabelCache.has(product)) {
+      return this._productLabelCache.get(product);
+    }
+
     const label = PRODUCT_LABELS[product] || product;
-    return label
+    const formatted = label
       .split(" ")
       .map((segment) =>
         segment.length ? segment.charAt(0).toUpperCase() + segment.slice(1) : segment
       )
       .join(" ");
+
+    this._productLabelCache.set(product, formatted);
+    return formatted;
   }
 
   _createRecorderState() {
@@ -2110,9 +2139,12 @@ export class RefinerySimulation {
   }
 
   getMissionState() {
+    // Avoid expensive structuredClone for UI updates
     return {
-      active: this.activeMission ? structuredClone(this.activeMission) : null,
-      history: structuredClone(this.missionHistory)
+      active: (this.activeMission && Array.isArray(this.activeMission.objectives))
+        ? { ...this.activeMission, objectives: this.activeMission.objectives.map(o => ({...o})) }
+        : (this.activeMission ? { ...this.activeMission, objectives: [] } : null),
+      history: [...this.missionHistory]
     };
   }
 

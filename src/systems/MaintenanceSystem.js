@@ -614,9 +614,9 @@ export class MaintenanceSystem {
   getState() {
     return {
       unitStrategies: { ...this.unitStrategies },
-      components: JSON.parse(JSON.stringify(this.components)),
-      sensors: JSON.parse(JSON.stringify(this.sensors)),
-      scheduledMaintenance: JSON.parse(JSON.stringify(this.scheduledMaintenance)),
+      components: structuredClone(this.components),
+      sensors: structuredClone(this.sensors),
+      scheduledMaintenance: structuredClone(this.scheduledMaintenance),
       workOrders: this.workOrders.filter(w => w.status !== 'completed'),
       stats: { ...this.stats }
     };
@@ -630,16 +630,16 @@ export class MaintenanceSystem {
       this.unitStrategies = { ...state.unitStrategies };
     }
     if (state.components) {
-      this.components = JSON.parse(JSON.stringify(state.components));
+      this.components = structuredClone(state.components);
     }
     if (state.sensors) {
-      this.sensors = JSON.parse(JSON.stringify(state.sensors));
+      this.sensors = structuredClone(state.sensors);
     }
     if (state.scheduledMaintenance) {
-      this.scheduledMaintenance = JSON.parse(JSON.stringify(state.scheduledMaintenance));
+      this.scheduledMaintenance = structuredClone(state.scheduledMaintenance);
     }
     if (state.workOrders) {
-      this.workOrders = JSON.parse(JSON.stringify(state.workOrders));
+      this.workOrders = structuredClone(state.workOrders);
     }
     if (state.stats) {
       Object.assign(this.stats, state.stats);

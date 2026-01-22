@@ -759,14 +759,16 @@ export class UIController {
     this.lastLogSignature = signature;
 
     this.elements.logList.innerHTML = "";
+    const fragment = document.createDocumentFragment();
     logs.slice(0, 30).forEach((entry) => {
       const item = document.createElement("li");
       if (entry.level !== "info") {
         item.classList.add(entry.level);
       }
       item.textContent = `[${entry.timestamp}] ${entry.message}`;
-      this.elements.logList.appendChild(item);
+      fragment.appendChild(item);
     });
+    this.elements.logList.appendChild(fragment);
   }
 
   _renderScorecard(metrics) {
@@ -1019,6 +1021,7 @@ export class UIController {
 
     const entries = [...shipments];
     const statusOrder = { pending: 0, completed: 1, missed: 2 };
+    const fragment = document.createDocumentFragment();
     entries
       .sort((a, b) => {
         const aStatus = statusOrder[a.status] ?? 3;
@@ -1030,15 +1033,16 @@ export class UIController {
       })
       .slice(0, 5)
       .forEach((shipment) => {
-        list.appendChild(this._renderShipmentItem(shipment));
+        fragment.appendChild(this._renderShipmentItem(shipment));
       });
 
     if (!entries.length) {
       const item = document.createElement("li");
       item.classList.add("shipment", "empty");
       item.textContent = "No marine movements scheduled.";
-      list.appendChild(item);
+      fragment.appendChild(item);
     }
+    list.appendChild(fragment);
 
     if (this.elements.shipmentReliability) {
       const total = stats?.total ?? 0;
@@ -1160,6 +1164,7 @@ export class UIController {
     objectivesList.style.listStyle = "none";
 
     if (Array.isArray(mission.objectives)) {
+      const fragment = document.createDocumentFragment();
       mission.objectives.forEach(obj => {
         const objItem = document.createElement("li");
         objItem.style.marginBottom = "0.5rem";
@@ -1213,8 +1218,9 @@ export class UIController {
 
         progress.appendChild(fill);
         objItem.appendChild(progress);
-        objectivesList.appendChild(objItem);
+        fragment.appendChild(objItem);
       });
+      objectivesList.appendChild(fragment);
     }
 
     item.appendChild(objectivesList);

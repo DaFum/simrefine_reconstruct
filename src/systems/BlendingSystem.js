@@ -551,11 +551,11 @@ export class BlendingSystem {
    */
   getState() {
     return {
-      blendingTanks: JSON.parse(JSON.stringify(this.blendingTanks)),
-      blendstockInventory: JSON.parse(JSON.stringify(this.blendstockInventory)),
-      activeRecipes: JSON.parse(JSON.stringify(this.activeRecipes)),
+      blendingTanks: structuredClone(this.blendingTanks),
+      blendstockInventory: structuredClone(this.blendstockInventory),
+      activeRecipes: structuredClone(this.activeRecipes),
       qualityMetrics: { ...this.qualityMetrics },
-      additiveUsage: JSON.parse(JSON.stringify(this.additiveUsage))
+      additiveUsage: structuredClone(this.additiveUsage)
     };
   }
 
@@ -564,19 +564,19 @@ export class BlendingSystem {
    */
   restoreState(state) {
     if (state.blendingTanks) {
-      this.blendingTanks = JSON.parse(JSON.stringify(state.blendingTanks));
+      this.blendingTanks = structuredClone(state.blendingTanks);
     }
     if (state.blendstockInventory) {
-      this.blendstockInventory = JSON.parse(JSON.stringify(state.blendstockInventory));
+      this.blendstockInventory = structuredClone(state.blendstockInventory);
     }
     if (state.activeRecipes) {
-      this.activeRecipes = JSON.parse(JSON.stringify(state.activeRecipes));
+      this.activeRecipes = structuredClone(state.activeRecipes);
     }
     if (state.qualityMetrics) {
       Object.assign(this.qualityMetrics, state.qualityMetrics);
     }
     if (state.additiveUsage) {
-      this.additiveUsage = JSON.parse(JSON.stringify(state.additiveUsage));
+      this.additiveUsage = structuredClone(state.additiveUsage);
     }
   }
 

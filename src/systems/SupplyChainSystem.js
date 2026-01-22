@@ -522,8 +522,8 @@ export class SupplyChainSystem {
    */
   getState() {
     return {
-      crudeTanks: JSON.parse(JSON.stringify(this.crudeTanks)),
-      activeContracts: JSON.parse(JSON.stringify(this.activeContracts)),
+      crudeTanks: structuredClone(this.crudeTanks),
+      activeContracts: structuredClone(this.activeContracts),
       marineDock: {
         occupied: this.marineDock.occupied.map(s => ({ ...s })),
         queue: this.marineDock.queue.map(s => ({ ...s }))
@@ -538,10 +538,10 @@ export class SupplyChainSystem {
    */
   restoreState(state) {
     if (state.crudeTanks) {
-      this.crudeTanks = JSON.parse(JSON.stringify(state.crudeTanks));
+      this.crudeTanks = structuredClone(state.crudeTanks);
     }
     if (state.activeContracts) {
-      this.activeContracts = JSON.parse(JSON.stringify(state.activeContracts));
+      this.activeContracts = structuredClone(state.activeContracts);
     }
     if (state.marineDock) {
       this.marineDock.occupied = state.marineDock.occupied || [];
