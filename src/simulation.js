@@ -785,18 +785,15 @@ export class RefinerySimulation {
     const crudeExpense = crudeThroughput * crudeCostPerBbl;
     const operatingExpense = maintenanceBudget + safetyBudget + envBudget;
 
-    const incidentsRisk = this._updateReliability(
-      this.unitMap,
-      {
-        hours,
-        scenario,
-        flare,
-        maintenance: this.params.maintenance,
-        safety: this.params.safety,
-        environment: this.params.environment,
-        strain: strainState,
-      }
-    );
+    const incidentsRisk = this._updateReliability({
+      hours,
+      scenario,
+      flare,
+      maintenance: this.params.maintenance,
+      safety: this.params.safety,
+      environment: this.params.environment,
+      strain: strainState,
+    });
 
     // Update Logistics System
     const logisticsReport = this.logisticsSystem.update(deltaMinutes, {
@@ -1122,7 +1119,7 @@ export class RefinerySimulation {
     }
   }
 
-  _updateReliability(units, context) {
+  _updateReliability(context) {
     const maintenance = clamp(context.maintenance ?? this.params.maintenance ?? 0.6, 0, 1);
     const safety = clamp(context.safety ?? this.params.safety ?? 0.45, 0, 1);
     const environment = clamp(context.environment ?? this.params.environment ?? 0.35, 0, 1);
@@ -1137,7 +1134,7 @@ export class RefinerySimulation {
     let penalty = 0;
     let integritySum = 0;
 
-    Object.values(units).forEach((unit) => {
+    this.units.forEach((unit) => {
       if (!unit) return;
       if (unit.status === "standby") {
         integritySum += unit.integrity;
