@@ -612,8 +612,8 @@ export class DisasterSystem {
    */
   getState() {
     return {
-      activeDisasters: JSON.parse(JSON.stringify(this.activeDisasters)),
-      deployedTeams: JSON.parse(JSON.stringify(this.deployedTeams)),
+      activeDisasters: structuredClone(this.activeDisasters),
+      deployedTeams: structuredClone(this.deployedTeams),
       evacuation: { ...this.evacuation },
       contamination: { ...this.contamination },
       stats: { ...this.stats }
@@ -625,10 +625,10 @@ export class DisasterSystem {
    */
   restoreState(state) {
     if (state.activeDisasters) {
-      this.activeDisasters = JSON.parse(JSON.stringify(state.activeDisasters));
+      this.activeDisasters = structuredClone(state.activeDisasters);
     }
     if (state.deployedTeams) {
-      this.deployedTeams = JSON.parse(JSON.stringify(state.deployedTeams));
+      this.deployedTeams = structuredClone(state.deployedTeams);
     }
     if (state.evacuation) {
       this.evacuation = { ...this.evacuation, ...state.evacuation };

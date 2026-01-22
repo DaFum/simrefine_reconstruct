@@ -437,10 +437,10 @@ export class StaffingSystem {
    */
   getState() {
     return {
-      departments: JSON.parse(JSON.stringify(this.departments)),
+      departments: structuredClone(this.departments),
       trainingBudget: this.trainingBudget,
       trainingSpent: this.trainingSpent,
-      activeTraining: JSON.parse(JSON.stringify(this.activeTraining)),
+      activeTraining: structuredClone(this.activeTraining),
       overtimeHours: this.overtimeHours,
       fatigueLevel: this.fatigueLevel,
       metrics: { ...this.metrics }
@@ -452,7 +452,7 @@ export class StaffingSystem {
    */
   restoreState(state) {
     if (state.departments) {
-      this.departments = JSON.parse(JSON.stringify(state.departments));
+      this.departments = structuredClone(state.departments);
     }
     if (typeof state.trainingBudget === 'number') {
       this.trainingBudget = state.trainingBudget;
@@ -461,7 +461,7 @@ export class StaffingSystem {
       this.trainingSpent = state.trainingSpent;
     }
     if (state.activeTraining) {
-      this.activeTraining = JSON.parse(JSON.stringify(state.activeTraining));
+      this.activeTraining = structuredClone(state.activeTraining);
     }
     if (typeof state.overtimeHours === 'number') {
       this.overtimeHours = state.overtimeHours;
