@@ -1,4 +1,5 @@
 import { drawScoreTrend } from "./ui/renderers/index.js";
+import { PredictionEngine } from "./predictionEngine.js";
 
 const PRODUCT_LABELS = {
   gasoline: "Gasoline",
@@ -126,6 +127,8 @@ export class UIController {
     this.activeAnimations = new Map();
     this.lastShipmentSignature = "";
     this.lastUnitAlert = new Map();
+    this.predictionEngine = new PredictionEngine();
+    this._predictionDebounce = null;
     this._injectHintLayer();
     this._bindEvents();
   }
@@ -201,39 +204,53 @@ export class UIController {
   _bindControls() {
     const { elements, simulation } = this;
 
-    elements.crude.addEventListener("input", (event) => {
-      const value = Number(event.target.value);
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "crudeIntake", value } });
-      elements.crudeValue.textContent = `${value.toFixed(0)} kbpd`;
-    });
+    const handleInput = (param, valueFormatter, valueConverter = (v) => Number(v)) => (event) => {
+      const rawValue = valueConverter(event.target.value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param, value: rawValue } });
+      if (valueFormatter) {
+          valueFormatter(rawValue);
+      }
+      this._debouncedPredict({ [param]: rawValue });
+    };
 
-    elements.focus.addEventListener("input", (event) => {
-      const value = Number(event.target.value) / 100;
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "productFocus", value } });
-      elements.focusValue.textContent = value > 0.5 ? "Gasoline" : value < 0.5 ? "Diesel" : "Balanced";
-    });
+    elements.crude.addEventListener("input", handleInput(
+        "crudeIntake",
+        (val) => elements.crudeValue.textContent = `${val.toFixed(0)} kbpd`
+    ));
 
-    elements.maintenance.addEventListener("input", (event) => {
-      const value = Number(event.target.value) / 100;
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "maintenance", value } });
-      elements.maintenanceValue.textContent = `${Math.round(value * 100)}%`;
-    });
+    elements.focus.addEventListener("input", handleInput(
+        "productFocus",
+        (val) => elements.focusValue.textContent = val > 0.5 ? "Gasoline" : val < 0.5 ? "Diesel" : "Balanced",
+        (v) => Number(v) / 100
+    ));
 
-    elements.safety.addEventListener("input", (event) => {
-      const value = Number(event.target.value) / 100;
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "safety", value } });
-      elements.safetyValue.textContent = `${Math.round(value * 100)}%`;
-    });
+    elements.maintenance.addEventListener("input", handleInput(
+        "maintenance",
+        (val) => elements.maintenanceValue.textContent = `${Math.round(val * 100)}%`,
+        (v) => Number(v) / 100
+    ));
 
-    elements.environment.addEventListener("input", (event) => {
-      const value = Number(event.target.value) / 100;
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "environment", value } });
-      elements.environmentValue.textContent = `${Math.round(value * 100)}%`;
-    });
+    elements.safety.addEventListener("input", handleInput(
+        "safety",
+        (val) => elements.safetyValue.textContent = `${Math.round(val * 100)}%`,
+        (v) => Number(v) / 100
+    ));
+
+    elements.environment.addEventListener("input", handleInput(
+        "environment",
+        (val) => elements.environmentValue.textContent = `${Math.round(val * 100)}%`,
+        (v) => Number(v) / 100
+    ));
 
     // Add sound on mouseup/keyup for sliders to not spam
     [elements.crude, elements.focus, elements.maintenance, elements.safety, elements.environment].forEach(el => {
-        el.addEventListener('change', () => this.audio?.play('hover')); // using hover as a soft click
+        el.addEventListener('change', () => {
+            this.audio?.play('hover'); // using hover as a soft click
+            this._clearPrediction(); // Clear ghosts on commit
+        });
+        // Clear predictions on mouseup (end of drag)
+        el.addEventListener('mouseup', () => this._clearPrediction());
+        el.addEventListener('keyup', () => this._clearPrediction());
     });
 
     elements.toggle.addEventListener("click", () => {
@@ -1758,5 +1775,67 @@ export class UIController {
       if (modal) {
           modal.style.display = 'none';
       }
+  }
+
+  _debouncedPredict(changes) {
+      if (this._predictionDebounce) {
+          clearTimeout(this._predictionDebounce);
+      }
+      this._predictionDebounce = setTimeout(() => {
+          const result = this.predictionEngine.predict(this.simulation, changes, 2);
+          this._renderPrediction(result);
+      }, 150);
+  }
+
+  _renderPrediction(result) {
+      if (!result || !result.metrics) return;
+
+      const createOrUpdateGhost = (parent, delta, formatter) => {
+          let ghost = parent.querySelector('.metric-ghost');
+          if (!ghost) {
+              ghost = document.createElement('span');
+              ghost.className = 'metric-ghost';
+              parent.appendChild(ghost);
+          }
+
+          if (Math.abs(delta) < 0.01) {
+              ghost.textContent = '';
+              return;
+          }
+
+          const sign = delta > 0 ? '+' : '';
+          ghost.textContent = `(${sign}${formatter(delta)})`;
+          ghost.className = 'metric-ghost ' + (delta > 0 ? 'positive' : 'negative');
+
+          // Contextual coloring override
+          // e.g. for Expense, positive delta is bad (negative color)
+          if (parent.id === 'expense-output' || parent.id === 'penalty-output') {
+              ghost.className = 'metric-ghost ' + (delta > 0 ? 'negative' : 'positive');
+          }
+      };
+
+      // Profit
+      if (this.elements.profitOutput) {
+          const profitDelta = result.metrics.profitPerHour.delta;
+          createOrUpdateGhost(this.elements.profitOutput.parentElement, profitDelta * 1000, (v) => this.profitFormatter.format(Math.round(v)));
+      }
+
+      // Reliability
+      if (this.elements.reliabilityOutput) {
+          const relDelta = result.metrics.reliability.delta;
+          createOrUpdateGhost(this.elements.reliabilityOutput.parentElement, relDelta, (v) => v.toFixed(1) + '%');
+      }
+
+      // Storage (Gasoline example)
+      // Note: Inventory bars are tricky to attach text to, might skip or add to map logistics label
+      if (this.elements.mapLogisticsGasoline) {
+           const delta = result.metrics.storage.gasoline;
+           createOrUpdateGhost(this.elements.mapLogisticsGasoline.parentElement, delta, (v) => v.toFixed(0) + 'kb');
+      }
+  }
+
+  _clearPrediction() {
+      const ghosts = document.querySelectorAll('.metric-ghost');
+      ghosts.forEach(el => el.remove());
   }
 }

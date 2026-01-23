@@ -1002,3 +1002,15 @@ body {
   font-family: var(--font-mono);
   color: #fff;
 }
+
+/* Prediction Ghost Values */
+.metric-ghost {
+  font-size: 0.85em;
+  margin-left: 8px;
+  font-weight: normal;
+  transition: opacity 0.2s;
+  font-family: var(--font-mono);
+}
+.metric-ghost.positive { color: var(--color-success, #4ade80); }
+.metric-ghost.negative { color: var(--color-danger, #ef4444); }
+.metric-ghost.neutral { color: var(--text-muted, #888); }
