@@ -4,6 +4,8 @@ export class AudioController {
     this.masterGain = null;
     this.enabled = false;
     this.sounds = new Map();
+    this.activeAmbience = new Map();
+    this.ambienceRegistry = new Map();
 
     // Attempt to initialize on user interaction
     this._initHandler = () => {
@@ -52,7 +54,9 @@ export class AudioController {
       }
       this.masterGain = null;
     }
+    this.stopAmbient(); // Stop all ambience
     this.sounds.clear();
+    this.ambienceRegistry.clear();
     this._sharedNoiseBuffer = null;
     this.enabled = false;
   }
@@ -100,6 +104,13 @@ export class AudioController {
     // Transaction/economy sounds
     this.sounds.set('cash_register', () => this._createCashRegister());
     this.sounds.set('contract_signed', () => this._createContractSigned());
+
+    this._generateAmbience();
+  }
+
+  _generateAmbience() {
+      this.ambienceRegistry.set('machinery', () => this._startMachineryAmbience());
+      this.ambienceRegistry.set('pump_hum', () => this._startPumpAmbience());
   }
 
   play(name) {
@@ -110,6 +121,41 @@ export class AudioController {
     } catch (e) {
         console.warn('Audio play error', e);
     }
+  }
+
+  startAmbient(name) {
+      if (!this.enabled || !this.context || this.activeAmbience.has(name)) return;
+      const gen = this.ambienceRegistry.get(name);
+      if (gen) {
+          try {
+            const stopFn = gen();
+            if (typeof stopFn === 'function') {
+                this.activeAmbience.set(name, stopFn);
+            }
+          } catch (e) {
+              console.warn('Audio startAmbient error', e);
+          }
+      }
+  }
+
+  stopAmbient(name) {
+      if (name) {
+          const stopFn = this.activeAmbience.get(name);
+          if (stopFn) {
+              try {
+                stopFn();
+              } catch (e) { console.warn('Audio stopAmbient error', e); }
+              this.activeAmbience.delete(name);
+          }
+      } else {
+          // Stop all
+          for (const stopFn of this.activeAmbience.values()) {
+              try {
+                stopFn();
+              } catch (e) { console.warn('Audio stopAllAmbient error', e); }
+          }
+          this.activeAmbience.clear();
+      }
   }
 
   _createOscillatorSound(type, freq, duration, vol) {
@@ -327,6 +373,63 @@ export class AudioController {
       osc.start(now + i * 0.15);
       osc.stop(now + i * 0.15 + 0.1);
     }
+  }
+
+  _startMachineryAmbience() {
+      if (!this._sharedNoiseBuffer) this._getNoiseBuffer();
+      if (!this._sharedNoiseBuffer) return () => {};
+
+      const source = this.context.createBufferSource();
+      source.buffer = this._sharedNoiseBuffer;
+      source.loop = true;
+
+      const filter = this.context.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 140;
+
+      const gain = this.context.createGain();
+      gain.gain.value = 0.05;
+
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      source.start();
+
+      return () => {
+          const now = this.context.currentTime;
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+          source.stop(now + 1.5);
+          setTimeout(() => {
+              source.disconnect();
+              gain.disconnect();
+              filter.disconnect();
+          }, 1600);
+      };
+  }
+
+  _startPumpAmbience() {
+      const osc = this.context.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = 58;
+
+      const gain = this.context.createGain();
+      gain.gain.value = 0.035;
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start();
+
+      return () => {
+          const now = this.context.currentTime;
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+          osc.stop(now + 0.5);
+          setTimeout(() => {
+              osc.disconnect();
+              gain.disconnect();
+          }, 600);
+      };
   }
 
   // Fire crackle - random pops

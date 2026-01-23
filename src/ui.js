@@ -124,6 +124,8 @@ export class UIController {
     this.storageFlashTimers = new Map();
     this.previousMetrics = {};
     this.activeAnimations = new Map();
+    this.lastShipmentSignature = "";
+    this.lastUnitAlert = new Map();
     this._injectHintLayer();
     this._bindEvents();
   }
@@ -227,6 +229,9 @@ export class UIController {
       // Audio handled in main.js for toggle
       const running = simulation.toggleRunning();
       elements.toggle.textContent = running ? "Pause" : "Resume";
+      if (this.onRunningChange) {
+        this.onRunningChange(running);
+      }
     });
 
     elements.step.addEventListener("click", () => {
@@ -389,6 +394,15 @@ export class UIController {
       return;
     }
 
+    // Shake on alert change
+    const lastAlert = this.lastUnitAlert.get(unit.id);
+    if (unit.alert && unit.alert !== lastAlert) {
+         unitDetails.classList.remove('shake');
+         void unitDetails.offsetWidth;
+         unitDetails.classList.add('shake');
+    }
+    this.lastUnitAlert.set(unit.id, unit.alert);
+
     const title = document.createElement("h3");
     title.textContent = unit.name;
     unitDetails.appendChild(title);
@@ -493,11 +507,11 @@ export class UIController {
     const formatBpd = (value) => `${value.toFixed(1)} kbpd`;
 
     // Animate throughputs
-    this._animateMetric(this.elements.gasolineOutput, 'gasoline', metrics.gasoline, formatBpd);
-    this._animateMetric(this.elements.dieselOutput, 'diesel', metrics.diesel, formatBpd);
-    this._animateMetric(this.elements.jetOutput, 'jet', metrics.jet, formatBpd);
-    this._animateMetric(this.elements.lpgOutput, 'lpg', metrics.lpg, formatBpd);
-    this._animateMetric(this.elements.wasteOutput, 'waste', metrics.waste || 0, formatBpd);
+    this._animateValue(this.elements.gasolineOutput, 'gasoline', metrics.gasoline, formatBpd);
+    this._animateValue(this.elements.dieselOutput, 'diesel', metrics.diesel, formatBpd);
+    this._animateValue(this.elements.jetOutput, 'jet', metrics.jet, formatBpd);
+    this._animateValue(this.elements.lpgOutput, 'lpg', metrics.lpg, formatBpd);
+    this._animateValue(this.elements.wasteOutput, 'waste', metrics.waste || 0, formatBpd);
 
     if (this.elements.flareOutput) {
       const flare = Math.round((metrics.flareLevel || 0) * 100);
@@ -508,21 +522,21 @@ export class UIController {
 
     // Animate Financials
     const profitVal = Math.round(metrics.profitPerHour * 1000);
-    this._animateMetric(this.elements.profitOutput, 'profit', profitVal, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
+    this._animateValue(this.elements.profitOutput, 'profit', profitVal, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
 
     if (this.elements.revenueOutput) {
       const revenue = typeof metrics.revenuePerDay === "number" ? Math.round(metrics.revenuePerDay * 1000) : 0;
-      this._animateMetric(this.elements.revenueOutput, 'revenue', revenue, (val) => `${this.profitFormatter.format(Math.round(val))} / day`);
+      this._animateValue(this.elements.revenueOutput, 'revenue', revenue, (val) => `${this.profitFormatter.format(Math.round(val))} / day`);
     }
 
     if (this.elements.expenseOutput) {
       const expensePerHour = typeof metrics.expensePerDay === "number" ? Math.round((metrics.expensePerDay / 24) * 1000) : 0;
-      this._animateMetric(this.elements.expenseOutput, 'expense', expensePerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
+      this._animateValue(this.elements.expenseOutput, 'expense', expensePerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
     }
 
     if (this.elements.penaltyOutput) {
       const penaltyPerHour = typeof metrics.penaltyPerDay === "number" ? Math.round((metrics.penaltyPerDay / 24) * 1000) : 0;
-      this._animateMetric(this.elements.penaltyOutput, 'penalty', penaltyPerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
+      this._animateValue(this.elements.penaltyOutput, 'penalty', penaltyPerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
     }
 
     if (this.elements.marginOutput) {
@@ -795,7 +809,7 @@ export class UIController {
         const positive = delta > 0;
         scoreDelta.classList.add(positive ? "positive" : "negative");
         const arrow = positive ? "▲" : "▼";
-        scoreDelta.textContent = `${arrow}${Math.abs(delta).toFixed(1)}`;
+        this._animateValue(scoreDelta, 'score-delta', Math.abs(delta), (val) => `${arrow}${val.toFixed(1)}`);
         scoreDelta.setAttribute(
           "title",
           positive ? "Score trending upward" : "Score trending downward"
@@ -940,14 +954,29 @@ export class UIController {
       }
       const level = storage?.levels?.[product] ?? 0;
       const capacity = storage?.capacity?.[product] ?? 0;
-      const ratio = capacity > 0 ? Math.min(Math.max(level / capacity, 0), 1.05) : 0;
-      const percent = `${Math.round(Math.min(ratio, 1) * 100)}%`;
-      element.textContent = capacity ? `${percent} (${level.toFixed(0)} kb)` : `${level.toFixed(0)} kb`;
+
+      this._animateValue(element, `tank-${product}`, level, (val) => {
+          const r = capacity ? Math.min(Math.max(val / capacity, 0), 1.05) : 0;
+          const p = Math.round(Math.min(r, 1) * 100);
+          return capacity ? `${p}% (${val.toFixed(0)} kb)` : `${val.toFixed(0)} kb`;
+      });
     };
 
     setTankSnapshot(mapLogisticsGasoline, "gasoline");
     setTankSnapshot(mapLogisticsDiesel, "diesel");
     setTankSnapshot(mapLogisticsJet, "jet");
+
+    // Pulse mapLogistics on shipment changes
+    const shipments = Array.isArray(logistics?.shipments) ? logistics.shipments : [];
+    const shipmentSignature = shipments.map(s => (s.id || '') + (s.status || '')).join('|');
+    if (this.lastShipmentSignature !== shipmentSignature) {
+        if (mapLogistics) {
+             mapLogistics.classList.remove('pulse');
+             void mapLogistics.offsetWidth;
+             mapLogistics.classList.add('pulse');
+        }
+        this.lastShipmentSignature = shipmentSignature;
+    }
 
     if (mapLogisticsStatus) {
       const pressure = logistics?.pressure || {};
@@ -1562,11 +1591,11 @@ export class UIController {
     this.elements.clock.textContent = `${month} ${day}, ${year} ${String(hour12).padStart(2, "0")}:${minutes} ${ampm}`;
   }
 
-  _animateMetric(element, key, targetValue, formatter) {
+  _animateValue(element, key, targetValue, formatter) {
     if (!element) return;
 
     const previous = this.previousMetrics[key] ?? targetValue;
-    if (Math.abs(previous - targetValue) < 0.1) {
+    if (Math.abs(previous - targetValue) < 0.05) {
         element.textContent = formatter(targetValue);
         this.previousMetrics[key] = targetValue;
         return;
@@ -1598,5 +1627,51 @@ export class UIController {
     };
 
     this.activeAnimations.set(key, requestAnimationFrame(animate));
+  }
+
+  toggleCommandPalette() {
+      let palette = document.getElementById('command-palette');
+      if (!palette) {
+          palette = document.createElement('div');
+          palette.id = 'command-palette';
+          palette.className = 'command-palette';
+          // Basic inline styles for Phase 1
+          palette.style.cssText = `
+            position: fixed; top: 20%; left: 50%; transform: translate(-50%, 0);
+            width: 450px; background: #121418; border: 1px solid var(--accent-blue, #00e5ff);
+            border-radius: 6px; padding: 12px; display: none; flex-direction: column; gap: 8px;
+            z-index: 10000; box-shadow: 0 12px 40px rgba(0,0,0,0.8); font-family: 'Inter', sans-serif;
+          `;
+          palette.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #333; padding-bottom: 8px;">
+                <span style="color: var(--accent-blue, #00e5ff); font-weight: bold;">></span>
+                <input type="text" placeholder="Type a command..." style="background: transparent; border: none; color: #fff; font-size: 1rem; width: 100%; outline: none;" autofocus>
+            </div>
+            <ul style="list-style: none; padding: 0; margin: 0; color: #aaa; font-size: 0.85rem;">
+                <li style="padding: 4px;">Suggestions:</li>
+                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px; margin-bottom: 2px;">Inspect Unit <span style="float: right; opacity: 0.5;">I</span></li>
+                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px; margin-bottom: 2px;">Deploy Bypass <span style="float: right; opacity: 0.5;">P</span></li>
+                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px;">Toggle Recording <span style="float: right; opacity: 0.5;">R</span></li>
+            </ul>
+          `;
+          document.body.appendChild(palette);
+
+          const input = palette.querySelector('input');
+          input.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape') {
+                  this.toggleCommandPalette();
+              }
+          });
+      }
+
+      const isVisible = palette.style.display !== 'none';
+      palette.style.display = isVisible ? 'none' : 'flex';
+
+      if (!isVisible) {
+          palette.querySelector('input').focus();
+          this.audio?.play('open');
+      } else {
+          this.audio?.play('close');
+      }
   }
 }

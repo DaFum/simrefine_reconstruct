@@ -229,8 +229,8 @@ export class TileRenderer {
     this.time += deltaSeconds;
     this.selectionPulse += deltaSeconds;
 
-    // Smooth camera damping
-    const smoothing = 4.0;
+    // Smooth camera damping (tuned for cinematic feel)
+    const smoothing = 2.0;
     this.cameraTarget.x = damp(this.cameraTarget.x, this.desiredCameraTarget.x, smoothing, deltaSeconds);
     this.cameraTarget.y = damp(this.cameraTarget.y, this.desiredCameraTarget.y, smoothing, deltaSeconds);
     this.cameraTarget.z = damp(this.cameraTarget.z, this.desiredCameraTarget.z, smoothing, deltaSeconds);

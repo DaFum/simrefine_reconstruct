@@ -172,7 +172,21 @@ if (ui.elements?.scenario) {
 
 ui.onRunningChange = (running) => {
   updateMenuToggle(running);
+  if (running) {
+    audio.startAmbient('machinery');
+    audio.startAmbient('pump_hum');
+  } else {
+    audio.stopAmbient();
+  }
 };
+
+// Ensure ambient audio starts on first interaction if simulation is running
+window.addEventListener('click', () => {
+  if (simulation.running) {
+    audio.startAmbient('machinery');
+    audio.startAmbient('pump_hum');
+  }
+}, { once: true });
 
 ui.onReset = () => {
   performSimulationReset();
@@ -527,6 +541,43 @@ function initializeMenus() {
   if (importInput) {
     importInput.addEventListener("change", handleSnapshotImport);
   }
+
+  // Keyboard Shortcuts
+  document.addEventListener('keydown', (event) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
+
+    if (event.code === 'Space') {
+        event.preventDefault();
+        if (menuToggle) menuToggle.click();
+        return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        if (typeof ui.toggleCommandPalette === 'function') {
+            ui.toggleCommandPalette();
+        }
+        return;
+    }
+
+    if (selectedUnitId) {
+        switch(event.key.toLowerCase()) {
+            case 'i':
+                handleToolbarCommand('inspection');
+                break;
+            case 'p':
+                handleToolbarCommand('build-pipe');
+                break;
+            case 'm':
+                handleToolbarCommand('bulldoze');
+                break;
+        }
+    }
+
+    if (event.key.toLowerCase() === 'r') {
+        handleToolbarCommand('record-demo');
+    }
+  });
 }
 
 /**
