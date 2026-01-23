@@ -2059,7 +2059,8 @@ export class RefinerySimulation {
       objectives,
       startedAt: this.timeMinutes,
       completed: false,
-      failed: false
+      failed: false,
+      triggers: missionDef.triggers || [] // Copy triggers
     };
 
     // Explicitly reset UI metric flag
@@ -2069,10 +2070,59 @@ export class RefinerySimulation {
     this.pushLog("info", missionDef.description);
   }
 
+  handleMissionChoice(choiceId) {
+      if (!this.activeMission || !this.activeMission.currentEvent) return;
+      const event = this.activeMission.currentEvent;
+      const choice = event.choices.find(c => c.id === choiceId);
+
+      if (choice) {
+          this.pushLog("info", `Decision: ${choice.label}`);
+          if (choice.effect) {
+              choice.effect(this); // Apply effect
+          }
+          if (choice.nextMission) {
+              // Branching
+              this.startMission(choice.nextMission);
+          }
+      }
+
+      // Clear event
+      this.activeMission.currentEvent = null;
+      if (this.eventBus) {
+          this.eventBus.emit("MISSION_EVENT_RESOLVED", { eventId: event.id, choiceId });
+      }
+  }
+
   _updateMission(hours, context) {
     if (!this.activeMission || this.activeMission.completed || this.activeMission.failed) {
       return;
     }
+
+    // Check triggers if no event is active
+    if (!this.activeMission.currentEvent && this.activeMission.triggers) {
+        this.activeMission.triggers.forEach(trigger => {
+            if (trigger.fired) return;
+            let fired = false;
+            if (trigger.type === 'metric') {
+                const val = this.metrics[trigger.metric];
+                if (trigger.operator === '>' && val > trigger.value) fired = true;
+                if (trigger.operator === '<' && val < trigger.value) fired = true;
+            }
+
+            if (fired) {
+                trigger.fired = true;
+                if (trigger.event) {
+                    this.activeMission.currentEvent = trigger.event;
+                    if (this.eventBus) {
+                        this.eventBus.emit("MISSION_EVENT_TRIGGERED", { event: trigger.event });
+                    }
+                }
+            }
+        });
+    }
+
+    // If event is active and blocking, pause mission progress?
+    // For now, we let objectives update in background unless specifically paused.
 
     const { shipments, metrics, production } = context;
     const mission = this.activeMission;

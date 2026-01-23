@@ -43,7 +43,38 @@ export const MISSIONS = [
       }
     ],
     next: "winter_diesel",
-    reward: "Score Bonus +150"
+    reward: "Score Bonus +150",
+    triggers: [
+        {
+            type: "metric",
+            metric: "gasoline",
+            operator: ">",
+            value: 100,
+            event: {
+                id: "summer_surge_decision",
+                title: "Market Opportunity: Spot Surge",
+                description: "A competitor's outage has spiked spot gasoline prices by +15%. Traders are asking to release reserve stocks immediately, but this risks running dry if production hiccups.",
+                choices: [
+                    {
+                        id: "release_reserves",
+                        label: "Release Reserves (Profit +$2M, Risk Low Inventory)",
+                        effect: (sim) => {
+                            sim.metrics.revenuePerDay += 2000000;
+                            sim.storage.levels.gasoline = Math.max(0, sim.storage.levels.gasoline - 50);
+                            sim.pushLog("success", "Reserves released into the rally.");
+                        }
+                    },
+                    {
+                        id: "hold_steady",
+                        label: "Hold Steady (Maintain Reliability)",
+                        effect: (sim) => {
+                            sim.pushLog("info", "Market opportunity declined. Focusing on stability.");
+                        }
+                    }
+                ]
+            }
+        }
+    ]
   },
   {
     id: "winter_diesel",

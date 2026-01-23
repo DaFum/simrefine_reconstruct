@@ -31,6 +31,7 @@ export class CommandSystem {
       'STOP_RECORDING': this._handleStopRecording.bind(this),
       'START_PLAYBACK': this._handleStartPlayback.bind(this),
       'STOP_PLAYBACK': this._handleStopPlayback.bind(this),
+      'MAKE_MISSION_CHOICE': this._handleMakeMissionChoice.bind(this),
     };
   }
 
@@ -196,5 +197,9 @@ export class CommandSystem {
     if (result?.success) {
       this.eventBus.emit("PLAYBACK_STOPPED", {});
     }
+  }
+
+  _handleMakeMissionChoice({ choiceId }) {
+      this.simulation.handleMissionChoice(choiceId);
   }
 }

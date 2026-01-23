@@ -158,6 +158,17 @@ export class UIController {
         }
     });
 
+    bus.on("MISSION_EVENT_TRIGGERED", (payload) => {
+        if (payload?.event) {
+            this._renderDecisionModal(payload.event);
+            this.audio?.play('alert');
+        }
+    });
+
+    bus.on("MISSION_EVENT_RESOLVED", (payload) => {
+        this._closeDecisionModal();
+    });
+
     // We could add more listeners here for UI reactions to system events
   }
 
@@ -1672,6 +1683,80 @@ export class UIController {
           this.audio?.play('open');
       } else {
           this.audio?.play('close');
+      }
+  }
+
+  _renderDecisionModal(eventData) {
+      const modalId = 'decision-modal';
+      let modal = document.getElementById(modalId);
+
+      if (!modal) {
+          modal = document.createElement('div');
+          modal.id = modalId;
+          modal.style.cssText = `
+              position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+              background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 11000;
+          `;
+
+          const card = document.createElement('div');
+          card.className = 'decision-card pulse';
+          card.style.cssText = `
+              width: 500px; background: #16181d; border: 1px solid var(--log-warning, #ffd33d);
+              border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 16px;
+              box-shadow: 0 0 40px rgba(255, 211, 61, 0.2); font-family: 'Inter', sans-serif;
+          `;
+
+          modal.appendChild(card);
+          document.body.appendChild(modal);
+      }
+
+      const card = modal.firstElementChild;
+      card.innerHTML = `
+          <h2 style="margin: 0; color: var(--log-warning, #ffd33d); font-size: 1.2rem; text-transform: uppercase; letter-spacing: 0.05em;">
+              ⚠️ Incoming Decision: ${eventData.title}
+          </h2>
+          <p style="margin: 0; color: #ccc; line-height: 1.5; font-size: 0.95rem;">
+              ${eventData.description}
+          </p>
+          <div class="decision-choices" style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+          </div>
+      `;
+
+      const choiceContainer = card.querySelector('.decision-choices');
+      if (eventData.choices) {
+          eventData.choices.forEach(choice => {
+              const btn = document.createElement('button');
+              btn.textContent = choice.label;
+              btn.style.cssText = `
+                  padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid #444;
+                  color: #fff; cursor: pointer; text-align: left; border-radius: 4px; transition: all 0.2s;
+                  font-weight: 500;
+              `;
+              btn.addEventListener('mouseenter', () => {
+                  btn.style.background = 'rgba(255,255,255,0.1)';
+                  btn.style.borderColor = '#666';
+              });
+              btn.addEventListener('mouseleave', () => {
+                  btn.style.background = 'rgba(255,255,255,0.05)';
+                  btn.style.borderColor = '#444';
+              });
+              btn.addEventListener('click', () => {
+                  this.commandSystem.dispatch({
+                      type: 'MAKE_MISSION_CHOICE',
+                      payload: { choiceId: choice.id }
+                  });
+              });
+              choiceContainer.appendChild(btn);
+          });
+      }
+
+      modal.style.display = 'flex';
+  }
+
+  _closeDecisionModal() {
+      const modal = document.getElementById('decision-modal');
+      if (modal) {
+          modal.style.display = 'none';
       }
   }
 }
