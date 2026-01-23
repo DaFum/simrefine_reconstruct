@@ -454,12 +454,23 @@ export class SupplyChainSystem {
   }
 
   _getMarineDockStatus() {
+    const status = this.marineDock.queue.reduce((acc, s) => {
+      if (s.status === 'waiting') {
+        acc.shipsWaiting++;
+      }
+      if (s.status === 'enroute') {
+        acc.shipsEnroute++;
+      }
+      acc.currentDemurrage += s.demurrage || 0;
+      return acc;
+    }, { shipsWaiting: 0, shipsEnroute: 0, currentDemurrage: 0 });
+
     return {
       slotsTotal: this.marineDock.slots,
       slotsOccupied: this.marineDock.occupied.length,
-      shipsWaiting: this.marineDock.queue.filter(s => s.status === 'waiting').length,
-      shipsEnroute: this.marineDock.queue.filter(s => s.status === 'enroute').length,
-      currentDemurrage: this.marineDock.queue.reduce((sum, s) => sum + (s.demurrage || 0), 0),
+      shipsWaiting: status.shipsWaiting,
+      shipsEnroute: status.shipsEnroute,
+      currentDemurrage: status.currentDemurrage,
       queue: this.marineDock.queue.map(s => ({
         id: s.id,
         crudeType: s.crudeType,
