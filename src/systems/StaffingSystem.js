@@ -341,9 +341,8 @@ export class StaffingSystem {
 
   _updateFatigue(hours) {
     // Calculate overtime from staffing shortages
-    const totalStaff = Object.values(this.departments).reduce((sum, d) => sum + d.current, 0);
-    const totalTarget = Object.values(this.departments).reduce((sum, d) => sum + d.target, 0);
-    const shortageRatio = totalStaff < totalTarget ? (totalTarget - totalStaff) / totalTarget : 0;
+    const { totalStaff, totalTarget } = this._calculateStaffingTotals();
+    const shortageRatio = totalStaff < totalTarget && totalTarget > 0 ? (totalTarget - totalStaff) / totalTarget : 0;
 
     // Overtime increases fatigue
     if (shortageRatio > 0.1) {
@@ -429,7 +428,18 @@ export class StaffingSystem {
 
   _getAverageMorale() {
     const depts = Object.values(this.departments);
+    if (depts.length === 0) return 0;
     return depts.reduce((sum, d) => sum + d.morale, 0) / depts.length;
+  }
+
+  _calculateStaffingTotals() {
+    let totalStaff = 0;
+    let totalTarget = 0;
+    for (const dept of Object.values(this.departments)) {
+      totalStaff += dept.current;
+      totalTarget += dept.target;
+    }
+    return { totalStaff, totalTarget };
   }
 
   /**
