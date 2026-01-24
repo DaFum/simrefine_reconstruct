@@ -1,5 +1,6 @@
 import { drawScoreTrend } from "./ui/renderers/index.js";
 import { PredictionEngine } from "./predictionEngine.js";
+import { ReplayControls } from "./ui/replayControls.js";
 
 const PRODUCT_LABELS = {
   gasoline: "Gasoline",
@@ -131,6 +132,16 @@ export class UIController {
     this._predictionDebounce = null;
     this._injectHintLayer();
     this._bindEvents();
+
+    this.replayControls = new ReplayControls(
+        document.body,
+        this.simulation.timeMachineSystem,
+        () => {
+            // On Exit Replay
+            this.setModeBadge("LIVE");
+            this.update(); // Refresh one last time
+        }
+    );
   }
 
   _bindEvents() {
@@ -481,6 +492,18 @@ export class UIController {
     }
     if (typeof this.simulation.getRecorderState === "function") {
       this._renderRecorderState(this.simulation.getRecorderState());
+    }
+
+    // Replay Updates
+    if (this.simulation.timeMachineSystem) {
+        const playback = this.simulation.timeMachineSystem.getPlaybackStatus();
+        this.replayControls.update(playback);
+
+        if (playback.active) {
+            this.setModeBadge("REPLAY");
+            // In replay mode, we might want to disable some controls or show visual indicator
+            // The simulation state is already updated to the frame, so rendering just works!
+        }
     }
 
     // Removed direct polling of getCompletedInspections as it is now handled by event listener
@@ -1634,6 +1657,14 @@ export class UIController {
         cancelAnimationFrame(this.activeAnimations.get(key));
     }
 
+    // Disable animation during replay for immediate feedback
+    const isReplay = this.simulation.timeMachineSystem?.playback?.active;
+    if (isReplay) {
+        element.textContent = formatter(targetValue);
+        this.previousMetrics[key] = targetValue;
+        return;
+    }
+
     const startValue = previous;
     const startTime = performance.now();
     const duration = 400; // ms
@@ -1679,7 +1710,8 @@ export class UIController {
                 <li style="padding: 4px;">Suggestions:</li>
                 <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px; margin-bottom: 2px;">Inspect Unit <span style="float: right; opacity: 0.5;">I</span></li>
                 <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px; margin-bottom: 2px;">Deploy Bypass <span style="float: right; opacity: 0.5;">P</span></li>
-                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px;">Toggle Recording <span style="float: right; opacity: 0.5;">R</span></li>
+                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px; margin-bottom: 2px;">Toggle Recording <span style="float: right; opacity: 0.5;">R</span></li>
+                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px;">Playback Last Session <span style="float: right; opacity: 0.5;">L</span></li>
             </ul>
           `;
           document.body.appendChild(palette);

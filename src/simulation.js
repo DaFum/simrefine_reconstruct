@@ -1708,7 +1708,7 @@ export class RefinerySimulation {
   }
 
   togglePerformanceRecording(options = {}) {
-    const { includeTimeMachine = false } = options;
+    const { includeTimeMachine = true } = options;
 
     if (this.recorder?.active) {
       const summary = this._summarizeRecorderState();

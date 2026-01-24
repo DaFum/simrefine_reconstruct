@@ -577,6 +577,16 @@ function initializeMenus() {
     if (event.key.toLowerCase() === 'r') {
         handleToolbarCommand('record-demo');
     }
+
+    if (event.key.toLowerCase() === 'l') {
+        const sessions = simulation.timeMachineSystem?.getSavedSessions() || [];
+        if (sessions.length > 0) {
+            simulation.timeMachineSystem.startPlayback(sessions[0].id);
+        } else {
+            // If no sessions, maybe show a hint
+            ui.showHint("No saved sessions to replay. Press 'R' to record first.");
+        }
+    }
   });
 }
 
