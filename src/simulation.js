@@ -1339,14 +1339,9 @@ export class RefinerySimulation {
     this.recorder.lastUpdatedAt = this.timeMinutes;
 
     const production = context?.production || {};
-    const produced = {
-      gasoline: Math.max(0, (production.gasoline || 0) * hours),
-      diesel: Math.max(0, (production.diesel || 0) * hours),
-      jet: Math.max(0, (production.jet || 0) * hours),
-    };
-    Object.entries(produced).forEach(([product, volume]) => {
-      this.recorder.production[product] += volume;
-    });
+    this.recorder.production.gasoline += Math.max(0, (production.gasoline || 0) * hours);
+    this.recorder.production.diesel += Math.max(0, (production.diesel || 0) * hours);
+    this.recorder.production.jet += Math.max(0, (production.jet || 0) * hours);
 
     const profitPerHour = Number.isFinite(context?.profitPerHour) ? context.profitPerHour : 0;
     this.recorder.profit += profitPerHour * hours;
@@ -1402,16 +1397,17 @@ export class RefinerySimulation {
       return;
     }
     const now = this.timeMinutes;
-    Object.entries({ ...this.pipelineBoosts }).forEach(([stream, boost]) => {
+    for (const stream in this.pipelineBoosts) {
+      const boost = this.pipelineBoosts[stream];
       if (!boost) {
-        return;
+        continue;
       }
       if (boost.expiresAt <= now) {
         const label = boost.label || stream;
         this.pushLog("info", `${label} bypass crews stand down; capacity back to normal.`);
         delete this.pipelineBoosts[stream];
       }
-    });
+    }
   }
 
   getMetrics() {
