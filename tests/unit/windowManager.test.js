@@ -127,6 +127,14 @@ describe('WindowManager', () => {
 
   describe('setWorkspace', () => {
     beforeEach(() => {
+      // Add menu bar for _createWorkspaceSwitcher
+      const menuBar = document.createElement('nav');
+      menuBar.id = 'menu-bar';
+      const spacer = document.createElement('div');
+      spacer.className = 'menu-spacer';
+      menuBar.appendChild(spacer);
+      document.body.appendChild(menuBar);
+
       windowManager = new WindowManager('desktop');
     });
 
@@ -185,6 +193,19 @@ describe('WindowManager', () => {
       expect(windowManager.activeWorkspace).toBe(current);
     });
 
+    it('should update active class on menu entries', () => {
+      const operationsEntry = windowManager.workspaceMenuEntries.get('operations');
+      const marketEntry = windowManager.workspaceMenuEntries.get('market');
+
+      windowManager.setWorkspace('operations');
+      expect(operationsEntry.classList.contains('active')).toBe(true);
+      expect(marketEntry.classList.contains('active')).toBe(false);
+
+      windowManager.setWorkspace('market');
+      expect(operationsEntry.classList.contains('active')).toBe(false);
+      expect(marketEntry.classList.contains('active')).toBe(true);
+    });
+
     it('should handle windows without data-window-id', () => {
       const window3 = document.createElement('div');
       window3.className = 'window custom-window';
@@ -233,6 +254,46 @@ describe('WindowManager', () => {
           });
         }
       });
+    });
+  });
+
+  describe('_createWorkspaceSwitcher', () => {
+    beforeEach(() => {
+      document.body.innerHTML = '';
+      container = document.createElement('div');
+      container.id = 'desktop';
+      document.body.appendChild(container);
+
+      const menuBar = document.createElement('nav');
+      menuBar.id = 'menu-bar';
+      const spacer = document.createElement('div');
+      spacer.className = 'menu-spacer';
+      menuBar.appendChild(spacer);
+      document.body.appendChild(menuBar);
+    });
+
+    it('should create a workspaces menu in the menu bar', () => {
+      windowManager = new WindowManager('desktop');
+      const menu = document.querySelector('.menu[data-menu="workspaces"]');
+      expect(menu).not.toBeNull();
+    });
+
+    it('should create menu entries for each workspace', () => {
+      windowManager = new WindowManager('desktop');
+      expect(windowManager.workspaceMenuEntries.size).toBe(3);
+      expect(windowManager.workspaceMenuEntries.has('operations')).toBe(true);
+      expect(windowManager.workspaceMenuEntries.has('market')).toBe(true);
+      expect(windowManager.workspaceMenuEntries.has('maintenance')).toBe(true);
+    });
+
+    it('should call setWorkspace when a menu entry is clicked', () => {
+      windowManager = new WindowManager('desktop');
+      const spy = vi.spyOn(windowManager, 'setWorkspace');
+      const marketEntry = windowManager.workspaceMenuEntries.get('market');
+
+      marketEntry.click();
+
+      expect(spy).toHaveBeenCalledWith('market');
     });
   });
 
