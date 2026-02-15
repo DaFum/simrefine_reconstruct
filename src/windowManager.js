@@ -5,6 +5,7 @@ export class WindowManager {
     this.container = document.getElementById(containerId);
     this.windows = [];
     this.activeWorkspace = "operations";
+    this.workspaceMenuEntries = new Map();
 
     // Workspaces definition
     this.workspaces = {
@@ -83,6 +84,7 @@ export class WindowManager {
 
     // Create workspace switcher (simple UI for now)
     this._createWorkspaceSwitcher();
+    this.setWorkspace(this.activeWorkspace);
   }
 
   _bringToFront(element) {
@@ -99,6 +101,11 @@ export class WindowManager {
       if (!this.workspaces[name]) return;
       this.activeWorkspace = name;
       const config = this.workspaces[name];
+
+      // Update menu active state
+      this.workspaceMenuEntries.forEach((entry, wsName) => {
+          entry.classList.toggle('active', wsName === name);
+      });
 
       this.windows.forEach(win => {
           // Check if window should be visible
@@ -128,8 +135,49 @@ export class WindowManager {
   }
 
   _createWorkspaceSwitcher() {
-      // Inject a simple switcher into the menu bar?
-      // Or just assume the existing UI will call setWorkspace.
-      // For now, let's expose it on window for debugging or Main usage.
+      const menuBar = document.getElementById('menu-bar');
+      if (!menuBar) return;
+
+      const spacer = menuBar.querySelector('.menu-spacer');
+
+      const menuContainer = document.createElement('div');
+      menuContainer.className = 'menu';
+      menuContainer.dataset.menu = 'workspaces';
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'menu-item';
+      button.setAttribute('role', 'menuitem');
+      button.setAttribute('aria-haspopup', 'true');
+      button.setAttribute('aria-expanded', 'false');
+      button.textContent = 'Workspaces';
+
+      const dropdown = document.createElement('div');
+      dropdown.className = 'menu-dropdown';
+      dropdown.setAttribute('role', 'menu');
+
+      Object.keys(this.workspaces).forEach(wsName => {
+          const entry = document.createElement('button');
+          entry.type = 'button';
+          entry.className = 'menu-entry';
+          entry.dataset.workspace = wsName;
+          entry.textContent = wsName.charAt(0).toUpperCase() + wsName.slice(1);
+
+          entry.addEventListener('click', () => {
+              this.setWorkspace(wsName);
+          });
+
+          dropdown.appendChild(entry);
+          this.workspaceMenuEntries.set(wsName, entry);
+      });
+
+      menuContainer.appendChild(button);
+      menuContainer.appendChild(dropdown);
+
+      if (spacer) {
+          menuBar.insertBefore(menuContainer, spacer);
+      } else {
+          menuBar.appendChild(menuContainer);
+      }
   }
 }
