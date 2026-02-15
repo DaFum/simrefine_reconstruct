@@ -2,6 +2,7 @@
  * Time Machine System
  * Record/Playback functionality with VCR controls
  * Allows reviewing past sessions to analyze what went wrong
+ * Integrated with Action Toys for replay visualization.
  */
 
 import { clamp } from "../simulation/utils/calculations.js";

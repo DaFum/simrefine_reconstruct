@@ -1,4 +1,6 @@
 import { drawScoreTrend } from "./ui/renderers/index.js";
+import { PredictionEngine } from "./predictionEngine.js";
+import { ReplayControls } from "./ui/replayControls.js";
 
 const PRODUCT_LABELS = {
   gasoline: "Gasoline",
@@ -124,8 +126,22 @@ export class UIController {
     this.storageFlashTimers = new Map();
     this.previousMetrics = {};
     this.activeAnimations = new Map();
+    this.lastShipmentSignature = "";
+    this.lastUnitAlert = new Map();
+    this.predictionEngine = new PredictionEngine();
+    this._predictionDebounce = null;
     this._injectHintLayer();
     this._bindEvents();
+
+    this.replayControls = new ReplayControls(
+        document.body,
+        this.simulation.timeMachineSystem,
+        () => {
+            // On Exit Replay
+            this.setModeBadge("LIVE");
+            this.update(); // Refresh one last time
+        }
+    );
   }
 
   _bindEvents() {
@@ -154,6 +170,17 @@ export class UIController {
         if (payload?.unitId) {
             this.showHint(`Maintenance scheduled for unit ${payload.unitId}`);
         }
+    });
+
+    bus.on("MISSION_EVENT_TRIGGERED", (payload) => {
+        if (payload?.event) {
+            this._renderDecisionModal(payload.event);
+            this.audio?.play('alert');
+        }
+    });
+
+    bus.on("MISSION_EVENT_RESOLVED", (payload) => {
+        this._closeDecisionModal();
     });
 
     // We could add more listeners here for UI reactions to system events
@@ -188,45 +215,62 @@ export class UIController {
   _bindControls() {
     const { elements, simulation } = this;
 
-    elements.crude.addEventListener("input", (event) => {
-      const value = Number(event.target.value);
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "crudeIntake", value } });
-      elements.crudeValue.textContent = `${value.toFixed(0)} kbpd`;
-    });
+    const handleInput = (param, valueFormatter, valueConverter = (v) => Number(v)) => (event) => {
+      const rawValue = valueConverter(event.target.value);
+      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param, value: rawValue } });
+      if (valueFormatter) {
+          valueFormatter(rawValue);
+      }
+      this._debouncedPredict({ [param]: rawValue });
+    };
 
-    elements.focus.addEventListener("input", (event) => {
-      const value = Number(event.target.value) / 100;
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "productFocus", value } });
-      elements.focusValue.textContent = value > 0.5 ? "Gasoline" : value < 0.5 ? "Diesel" : "Balanced";
-    });
+    elements.crude.addEventListener("input", handleInput(
+        "crudeIntake",
+        (val) => elements.crudeValue.textContent = `${val.toFixed(0)} kbpd`
+    ));
 
-    elements.maintenance.addEventListener("input", (event) => {
-      const value = Number(event.target.value) / 100;
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "maintenance", value } });
-      elements.maintenanceValue.textContent = `${Math.round(value * 100)}%`;
-    });
+    elements.focus.addEventListener("input", handleInput(
+        "productFocus",
+        (val) => elements.focusValue.textContent = val > 0.5 ? "Gasoline" : val < 0.5 ? "Diesel" : "Balanced",
+        (v) => Number(v) / 100
+    ));
 
-    elements.safety.addEventListener("input", (event) => {
-      const value = Number(event.target.value) / 100;
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "safety", value } });
-      elements.safetyValue.textContent = `${Math.round(value * 100)}%`;
-    });
+    elements.maintenance.addEventListener("input", handleInput(
+        "maintenance",
+        (val) => elements.maintenanceValue.textContent = `${Math.round(val * 100)}%`,
+        (v) => Number(v) / 100
+    ));
 
-    elements.environment.addEventListener("input", (event) => {
-      const value = Number(event.target.value) / 100;
-      this.commandSystem.dispatch({ type: "SET_PARAM", payload: { param: "environment", value } });
-      elements.environmentValue.textContent = `${Math.round(value * 100)}%`;
-    });
+    elements.safety.addEventListener("input", handleInput(
+        "safety",
+        (val) => elements.safetyValue.textContent = `${Math.round(val * 100)}%`,
+        (v) => Number(v) / 100
+    ));
+
+    elements.environment.addEventListener("input", handleInput(
+        "environment",
+        (val) => elements.environmentValue.textContent = `${Math.round(val * 100)}%`,
+        (v) => Number(v) / 100
+    ));
 
     // Add sound on mouseup/keyup for sliders to not spam
     [elements.crude, elements.focus, elements.maintenance, elements.safety, elements.environment].forEach(el => {
-        el.addEventListener('change', () => this.audio?.play('hover')); // using hover as a soft click
+        el.addEventListener('change', () => {
+            this.audio?.play('hover'); // using hover as a soft click
+            this._clearPrediction(); // Clear ghosts on commit
+        });
+        // Clear predictions on mouseup (end of drag)
+        el.addEventListener('mouseup', () => this._clearPrediction());
+        el.addEventListener('keyup', () => this._clearPrediction());
     });
 
     elements.toggle.addEventListener("click", () => {
       // Audio handled in main.js for toggle
       const running = simulation.toggleRunning();
       elements.toggle.textContent = running ? "Pause" : "Resume";
+      if (this.onRunningChange) {
+        this.onRunningChange(running);
+      }
     });
 
     elements.step.addEventListener("click", () => {
@@ -389,6 +433,15 @@ export class UIController {
       return;
     }
 
+    // Shake on alert change
+    const lastAlert = this.lastUnitAlert.get(unit.id);
+    if (unit.alert && unit.alert !== lastAlert) {
+         unitDetails.classList.remove('shake');
+         void unitDetails.offsetWidth;
+         unitDetails.classList.add('shake');
+    }
+    this.lastUnitAlert.set(unit.id, unit.alert);
+
     const title = document.createElement("h3");
     title.textContent = unit.name;
     unitDetails.appendChild(title);
@@ -439,6 +492,18 @@ export class UIController {
     }
     if (typeof this.simulation.getRecorderState === "function") {
       this._renderRecorderState(this.simulation.getRecorderState());
+    }
+
+    // Replay Updates
+    if (this.simulation.timeMachineSystem) {
+        const playback = this.simulation.timeMachineSystem.getPlaybackStatus();
+        this.replayControls.update(playback);
+
+        if (playback.active) {
+            this.setModeBadge("REPLAY");
+            // In replay mode, we might want to disable some controls or show visual indicator
+            // The simulation state is already updated to the frame, so rendering just works!
+        }
     }
 
     // Removed direct polling of getCompletedInspections as it is now handled by event listener
@@ -493,11 +558,11 @@ export class UIController {
     const formatBpd = (value) => `${value.toFixed(1)} kbpd`;
 
     // Animate throughputs
-    this._animateMetric(this.elements.gasolineOutput, 'gasoline', metrics.gasoline, formatBpd);
-    this._animateMetric(this.elements.dieselOutput, 'diesel', metrics.diesel, formatBpd);
-    this._animateMetric(this.elements.jetOutput, 'jet', metrics.jet, formatBpd);
-    this._animateMetric(this.elements.lpgOutput, 'lpg', metrics.lpg, formatBpd);
-    this._animateMetric(this.elements.wasteOutput, 'waste', metrics.waste || 0, formatBpd);
+    this._animateValue(this.elements.gasolineOutput, 'gasoline', metrics.gasoline, formatBpd);
+    this._animateValue(this.elements.dieselOutput, 'diesel', metrics.diesel, formatBpd);
+    this._animateValue(this.elements.jetOutput, 'jet', metrics.jet, formatBpd);
+    this._animateValue(this.elements.lpgOutput, 'lpg', metrics.lpg, formatBpd);
+    this._animateValue(this.elements.wasteOutput, 'waste', metrics.waste || 0, formatBpd);
 
     if (this.elements.flareOutput) {
       const flare = Math.round((metrics.flareLevel || 0) * 100);
@@ -508,21 +573,21 @@ export class UIController {
 
     // Animate Financials
     const profitVal = Math.round(metrics.profitPerHour * 1000);
-    this._animateMetric(this.elements.profitOutput, 'profit', profitVal, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
+    this._animateValue(this.elements.profitOutput, 'profit', profitVal, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
 
     if (this.elements.revenueOutput) {
       const revenue = typeof metrics.revenuePerDay === "number" ? Math.round(metrics.revenuePerDay * 1000) : 0;
-      this._animateMetric(this.elements.revenueOutput, 'revenue', revenue, (val) => `${this.profitFormatter.format(Math.round(val))} / day`);
+      this._animateValue(this.elements.revenueOutput, 'revenue', revenue, (val) => `${this.profitFormatter.format(Math.round(val))} / day`);
     }
 
     if (this.elements.expenseOutput) {
       const expensePerHour = typeof metrics.expensePerDay === "number" ? Math.round((metrics.expensePerDay / 24) * 1000) : 0;
-      this._animateMetric(this.elements.expenseOutput, 'expense', expensePerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
+      this._animateValue(this.elements.expenseOutput, 'expense', expensePerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
     }
 
     if (this.elements.penaltyOutput) {
       const penaltyPerHour = typeof metrics.penaltyPerDay === "number" ? Math.round((metrics.penaltyPerDay / 24) * 1000) : 0;
-      this._animateMetric(this.elements.penaltyOutput, 'penalty', penaltyPerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
+      this._animateValue(this.elements.penaltyOutput, 'penalty', penaltyPerHour, (val) => `${this.profitFormatter.format(Math.round(val))} / hr`);
     }
 
     if (this.elements.marginOutput) {
@@ -795,7 +860,7 @@ export class UIController {
         const positive = delta > 0;
         scoreDelta.classList.add(positive ? "positive" : "negative");
         const arrow = positive ? "▲" : "▼";
-        scoreDelta.textContent = `${arrow}${Math.abs(delta).toFixed(1)}`;
+        this._animateValue(scoreDelta, 'score-delta', Math.abs(delta), (val) => `${arrow}${val.toFixed(1)}`);
         scoreDelta.setAttribute(
           "title",
           positive ? "Score trending upward" : "Score trending downward"
@@ -940,14 +1005,29 @@ export class UIController {
       }
       const level = storage?.levels?.[product] ?? 0;
       const capacity = storage?.capacity?.[product] ?? 0;
-      const ratio = capacity > 0 ? Math.min(Math.max(level / capacity, 0), 1.05) : 0;
-      const percent = `${Math.round(Math.min(ratio, 1) * 100)}%`;
-      element.textContent = capacity ? `${percent} (${level.toFixed(0)} kb)` : `${level.toFixed(0)} kb`;
+
+      this._animateValue(element, `tank-${product}`, level, (val) => {
+          const r = capacity ? Math.min(Math.max(val / capacity, 0), 1.05) : 0;
+          const p = Math.round(Math.min(r, 1) * 100);
+          return capacity ? `${p}% (${val.toFixed(0)} kb)` : `${val.toFixed(0)} kb`;
+      });
     };
 
     setTankSnapshot(mapLogisticsGasoline, "gasoline");
     setTankSnapshot(mapLogisticsDiesel, "diesel");
     setTankSnapshot(mapLogisticsJet, "jet");
+
+    // Pulse mapLogistics on shipment changes
+    const shipments = Array.isArray(logistics?.shipments) ? logistics.shipments : [];
+    const shipmentSignature = shipments.map(s => (s.id || '') + (s.status || '')).join('|');
+    if (this.lastShipmentSignature !== shipmentSignature) {
+        if (mapLogistics) {
+             mapLogistics.classList.remove('pulse');
+             void mapLogistics.offsetWidth;
+             mapLogistics.classList.add('pulse');
+        }
+        this.lastShipmentSignature = shipmentSignature;
+    }
 
     if (mapLogisticsStatus) {
       const pressure = logistics?.pressure || {};
@@ -1562,11 +1642,11 @@ export class UIController {
     this.elements.clock.textContent = `${month} ${day}, ${year} ${String(hour12).padStart(2, "0")}:${minutes} ${ampm}`;
   }
 
-  _animateMetric(element, key, targetValue, formatter) {
+  _animateValue(element, key, targetValue, formatter) {
     if (!element) return;
 
     const previous = this.previousMetrics[key] ?? targetValue;
-    if (Math.abs(previous - targetValue) < 0.1) {
+    if (Math.abs(previous - targetValue) < 0.05) {
         element.textContent = formatter(targetValue);
         this.previousMetrics[key] = targetValue;
         return;
@@ -1575,6 +1655,14 @@ export class UIController {
     // Cancel existing animation for this key
     if (this.activeAnimations.has(key)) {
         cancelAnimationFrame(this.activeAnimations.get(key));
+    }
+
+    // Disable animation during replay for immediate feedback
+    const isReplay = this.simulation.timeMachineSystem?.playback?.active;
+    if (isReplay) {
+        element.textContent = formatter(targetValue);
+        this.previousMetrics[key] = targetValue;
+        return;
     }
 
     const startValue = previous;
@@ -1598,5 +1686,188 @@ export class UIController {
     };
 
     this.activeAnimations.set(key, requestAnimationFrame(animate));
+  }
+
+  toggleCommandPalette() {
+      let palette = document.getElementById('command-palette');
+      if (!palette) {
+          palette = document.createElement('div');
+          palette.id = 'command-palette';
+          palette.className = 'command-palette';
+          // Basic inline styles for Phase 1
+          palette.style.cssText = `
+            position: fixed; top: 20%; left: 50%; transform: translate(-50%, 0);
+            width: 450px; background: #121418; border: 1px solid var(--accent-blue, #00e5ff);
+            border-radius: 6px; padding: 12px; display: none; flex-direction: column; gap: 8px;
+            z-index: 10000; box-shadow: 0 12px 40px rgba(0,0,0,0.8); font-family: 'Inter', sans-serif;
+          `;
+          palette.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #333; padding-bottom: 8px;">
+                <span style="color: var(--accent-blue, #00e5ff); font-weight: bold;">></span>
+                <input type="text" placeholder="Type a command..." style="background: transparent; border: none; color: #fff; font-size: 1rem; width: 100%; outline: none;" autofocus>
+            </div>
+            <ul style="list-style: none; padding: 0; margin: 0; color: #aaa; font-size: 0.85rem;">
+                <li style="padding: 4px;">Suggestions:</li>
+                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px; margin-bottom: 2px;">Inspect Unit <span style="float: right; opacity: 0.5;">I</span></li>
+                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px; margin-bottom: 2px;">Deploy Bypass <span style="float: right; opacity: 0.5;">P</span></li>
+                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px; margin-bottom: 2px;">Toggle Recording <span style="float: right; opacity: 0.5;">R</span></li>
+                <li style="padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 3px;">Playback Last Session <span style="float: right; opacity: 0.5;">L</span></li>
+            </ul>
+          `;
+          document.body.appendChild(palette);
+
+          const input = palette.querySelector('input');
+          input.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape') {
+                  this.toggleCommandPalette();
+              }
+          });
+      }
+
+      const isVisible = palette.style.display !== 'none';
+      palette.style.display = isVisible ? 'none' : 'flex';
+
+      if (!isVisible) {
+          palette.querySelector('input').focus();
+          this.audio?.play('open');
+      } else {
+          this.audio?.play('close');
+      }
+  }
+
+  _renderDecisionModal(eventData) {
+      const modalId = 'decision-modal';
+      let modal = document.getElementById(modalId);
+
+      if (!modal) {
+          modal = document.createElement('div');
+          modal.id = modalId;
+          modal.style.cssText = `
+              position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+              background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 11000;
+          `;
+
+          const card = document.createElement('div');
+          card.className = 'decision-card pulse';
+          card.style.cssText = `
+              width: 500px; background: #16181d; border: 1px solid var(--log-warning, #ffd33d);
+              border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 16px;
+              box-shadow: 0 0 40px rgba(255, 211, 61, 0.2); font-family: 'Inter', sans-serif;
+          `;
+
+          modal.appendChild(card);
+          document.body.appendChild(modal);
+      }
+
+      const card = modal.firstElementChild;
+      card.innerHTML = `
+          <h2 style="margin: 0; color: var(--log-warning, #ffd33d); font-size: 1.2rem; text-transform: uppercase; letter-spacing: 0.05em;">
+              ⚠️ Incoming Decision: ${eventData.title}
+          </h2>
+          <p style="margin: 0; color: #ccc; line-height: 1.5; font-size: 0.95rem;">
+              ${eventData.description}
+          </p>
+          <div class="decision-choices" style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+          </div>
+      `;
+
+      const choiceContainer = card.querySelector('.decision-choices');
+      if (eventData.choices) {
+          eventData.choices.forEach(choice => {
+              const btn = document.createElement('button');
+              btn.textContent = choice.label;
+              btn.style.cssText = `
+                  padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid #444;
+                  color: #fff; cursor: pointer; text-align: left; border-radius: 4px; transition: all 0.2s;
+                  font-weight: 500;
+              `;
+              btn.addEventListener('mouseenter', () => {
+                  btn.style.background = 'rgba(255,255,255,0.1)';
+                  btn.style.borderColor = '#666';
+              });
+              btn.addEventListener('mouseleave', () => {
+                  btn.style.background = 'rgba(255,255,255,0.05)';
+                  btn.style.borderColor = '#444';
+              });
+              btn.addEventListener('click', () => {
+                  this.commandSystem.dispatch({
+                      type: 'MAKE_MISSION_CHOICE',
+                      payload: { choiceId: choice.id }
+                  });
+              });
+              choiceContainer.appendChild(btn);
+          });
+      }
+
+      modal.style.display = 'flex';
+  }
+
+  _closeDecisionModal() {
+      const modal = document.getElementById('decision-modal');
+      if (modal) {
+          modal.style.display = 'none';
+      }
+  }
+
+  _debouncedPredict(changes) {
+      if (this._predictionDebounce) {
+          clearTimeout(this._predictionDebounce);
+      }
+      this._predictionDebounce = setTimeout(() => {
+          const result = this.predictionEngine.predict(this.simulation, changes, 2);
+          this._renderPrediction(result);
+      }, 150);
+  }
+
+  _renderPrediction(result) {
+      if (!result || !result.metrics) return;
+
+      const createOrUpdateGhost = (parent, delta, formatter) => {
+          let ghost = parent.querySelector('.metric-ghost');
+          if (!ghost) {
+              ghost = document.createElement('span');
+              ghost.className = 'metric-ghost';
+              parent.appendChild(ghost);
+          }
+
+          if (Math.abs(delta) < 0.01) {
+              ghost.textContent = '';
+              return;
+          }
+
+          const sign = delta > 0 ? '+' : '';
+          ghost.textContent = `(${sign}${formatter(delta)})`;
+          ghost.className = 'metric-ghost ' + (delta > 0 ? 'positive' : 'negative');
+
+          // Contextual coloring override
+          // e.g. for Expense, positive delta is bad (negative color)
+          if (parent.id === 'expense-output' || parent.id === 'penalty-output') {
+              ghost.className = 'metric-ghost ' + (delta > 0 ? 'negative' : 'positive');
+          }
+      };
+
+      // Profit
+      if (this.elements.profitOutput) {
+          const profitDelta = result.metrics.profitPerHour.delta;
+          createOrUpdateGhost(this.elements.profitOutput.parentElement, profitDelta * 1000, (v) => this.profitFormatter.format(Math.round(v)));
+      }
+
+      // Reliability
+      if (this.elements.reliabilityOutput) {
+          const relDelta = result.metrics.reliability.delta;
+          createOrUpdateGhost(this.elements.reliabilityOutput.parentElement, relDelta, (v) => v.toFixed(1) + '%');
+      }
+
+      // Storage (Gasoline example)
+      // Note: Inventory bars are tricky to attach text to, might skip or add to map logistics label
+      if (this.elements.mapLogisticsGasoline) {
+           const delta = result.metrics.storage.gasoline;
+           createOrUpdateGhost(this.elements.mapLogisticsGasoline.parentElement, delta, (v) => v.toFixed(0) + 'kb');
+      }
+  }
+
+  _clearPrediction() {
+      const ghosts = document.querySelectorAll('.metric-ghost');
+      ghosts.forEach(el => el.remove());
   }
 }
